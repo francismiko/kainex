@@ -49,6 +49,10 @@ data/
 *.duckdb.wal
 *.parquet
 
+# VitePress
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
 # Misc
 *.log
 .cache/

@@ -52,6 +52,12 @@ smoke-test:
 e2e:
   pnpm --filter @kainex/web test:e2e
 
+# ─── Documentation ─────────────────────────────────────────────
+
+# Start documentation dev server
+docs:
+  pnpm docs:dev
+
 # ─── Build ─────────────────────────────────────────────────────
 
 # Build frontend

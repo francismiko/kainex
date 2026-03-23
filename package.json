@@ -8,6 +8,12 @@
     "dev": "pnpm --filter @kainex/web dev",
     "build": "pnpm --filter @kainex/web build",
     "lint": "pnpm --filter @kainex/web lint",
-    "typecheck": "pnpm --filter @kainex/web typecheck"
+    "typecheck": "pnpm --filter @kainex/web typecheck",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
   }
 }
