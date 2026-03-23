@@ -1,0 +1,36 @@
+[project]
+name = "agent"
+version = "0.1.0"
+description = "Kainex AI Trading Agent - LLM-powered trading decisions via OpenRouter"
+readme = "README.md"
+authors = [
+    { name = "francismiko", email = "1485059943@qq.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "openai",
+    "httpx",
+    "pydantic>=2",
+    "pydantic-settings",
+    "duckdb",
+    "pandas",
+    "numpy",
+    "croniter",
+    "kainex-shared",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.uv.sources]
+kainex-shared = { path = "../../packages/shared", editable = true }
+
+[build-system]
+requires = ["uv_build>=0.10.12,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

@@ -36,6 +36,10 @@ collector:
 engine:
   cd services/engine && uv run uvicorn engine.api.main:app --reload --host 0.0.0.0 --port 8001
 
+# Start AI trading agent
+agent:
+  cd services/agent && uv run python -m agent
+
 # Start portless proxy (run once, keeps running)
 proxy:
   portless proxy start
@@ -78,11 +82,13 @@ lint:
 py-install:
   cd services/collector && uv sync
   cd services/engine && uv sync
+  cd services/agent && uv sync
 
 # Run Python tests
 py-test:
   cd services/collector && uv run pytest
   cd services/engine && uv run pytest
+  cd services/agent && uv run pytest
 
 # Seed sample data for development
 seed:
