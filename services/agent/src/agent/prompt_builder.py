@@ -30,27 +30,48 @@ class PromptBuilder:
         market_summary: dict,
         portfolio: dict,
         risk_constraints: dict,
+        *,
+        performance_summary: str = "",
+        iteration_suggestion: str = "",
     ) -> str:
         persona_desc = self.PERSONAS.get(persona, self.PERSONAS["balanced"])
 
-        return f"""{persona_desc}
+        sections = [
+            persona_desc,
+            "",
+            "## 当前市场状态",
+            self._format_market(market_summary),
+            "",
+            "## 当前持仓",
+            self._format_portfolio(portfolio),
+            "",
+            "## 风控约束",
+            self._format_risk(risk_constraints),
+        ]
 
-## 当前市场状态
-{self._format_market(market_summary)}
+        if performance_summary:
+            sections += [
+                "",
+                "## 历史交易表现",
+                performance_summary,
+            ]
 
-## 当前持仓
-{self._format_portfolio(portfolio)}
+        if iteration_suggestion:
+            sections += [
+                "",
+                "## 上一版本改进建议",
+                iteration_suggestion,
+            ]
 
-## 风控约束
-{self._format_risk(risk_constraints)}
-
-## 请分析当前市场并给出交易决策
-
-返回严格 JSON 格式（不要包含任何 markdown）：
-{{
+        sections += [
+            "",
+            "## 请分析当前市场并给出交易决策",
+            "",
+            "返回严格 JSON 格式（不要包含任何 markdown）：",
+            """{
     "analysis": "对当前市场的分析...",
     "decisions": [
-        {{
+        {
             "action": "buy" | "sell" | "hold",
             "symbol": "BTC/USDT",
             "quantity": 0.1,
@@ -58,18 +79,66 @@ class PromptBuilder:
             "confidence": 0.85,
             "stop_loss": 60000,
             "take_profit": 70000
-        }}
+        }
     ],
     "overall_sentiment": "bullish" | "bearish" | "neutral"
+}""",
+            "",
+            "规则：",
+            "1. decisions 数组中每个 symbol 最多出现一次。",
+            "2. action 只能是 \"buy\"、\"sell\" 或 \"hold\"。",
+            "3. confidence 范围 0-1，低于 0.6 时应选择 hold。",
+            "4. 必须设置 stop_loss 和 take_profit。",
+            "5. quantity 必须是正数，且不能超过风控约束。",
+            "6. 如果市场数据不可用，选择 hold。",
+        ]
+
+        return "\n".join(sections)
+
+    def build_iteration_prompt(
+        self,
+        version_id: str,
+        performance_summary: str,
+        cycle_count: int,
+        current_parameters: dict,
+    ) -> str:
+        """Build a prompt that asks the LLM whether the strategy should iterate."""
+        params_text = json.dumps(current_parameters, ensure_ascii=False, indent=2)
+        return f"""你是一位量化策略优化专家。请根据以下策略表现，决定是否需要调整策略参数。
+
+## 策略迭代分析
+当前策略版本: {version_id}
+已运行周期数: {cycle_count}
+
+## 当前策略参数
+{params_text}
+
+## 交易表现
+{performance_summary}
+
+请分析：
+1. 当前策略的优劣
+2. 是否需要调整参数（如止损位、仓位大小、入场条件、persona 等）
+3. 如果需要调整，返回新参数
+
+返回严格 JSON 格式（不要包含任何 markdown）：
+{{
+    "should_iterate": true 或 false,
+    "analysis": "对当前策略表现的详细分析...",
+    "new_parameters": {{
+        "persona": "balanced",
+        "stop_loss_pct": 0.05,
+        "max_position_pct": 0.8,
+        "min_confidence": 0.6
+    }},
+    "iteration_reason": "调整原因..."
 }}
 
 规则：
-1. decisions 数组中每个 symbol 最多出现一次。
-2. action 只能是 "buy"、"sell" 或 "hold"。
-3. confidence 范围 0-1，低于 0.6 时应选择 hold。
-4. 必须设置 stop_loss 和 take_profit。
-5. quantity 必须是正数，且不能超过风控约束。
-6. 如果市场数据不可用，选择 hold。
+1. 如果胜率和 PnL 表现良好，不必强行调整。
+2. 如果亏损严重或回撤过大，建议收紧风控。
+3. 如果策略过于保守导致交易很少，可以适当放宽。
+4. new_parameters 中只包含需要修改的参数。
 """
 
     @staticmethod

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sys
+from datetime import datetime, timezone
 
 from agent.config import AgentSettings
 from agent.executor import TradeExecutor
@@ -10,12 +12,28 @@ from agent.feedback import FeedbackAnalyzer
 from agent.llm import LLMClient
 from agent.market_analyzer import MarketAnalyzer
 from agent.prompt_builder import PromptBuilder
+from agent.strategy_journal import StrategyJournal
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("agent")
+
+# Minimum cycles before considering a strategy iteration.
+MIN_ITERATION_CYCLES = 6
+
+
+def _current_parameters(settings: AgentSettings) -> dict:
+    """Snapshot the strategy-relevant settings into a plain dict."""
+    return {
+        "persona": settings.persona,
+        "stop_loss_pct": settings.stop_loss_pct,
+        "max_position_pct": settings.max_position_pct,
+        "initial_capital": settings.initial_capital,
+        "symbols": list(settings.symbols),
+        "trading_interval_minutes": settings.trading_interval_minutes,
+    }
 
 
 async def run_cycle(
@@ -25,10 +43,15 @@ async def run_cycle(
     builder: PromptBuilder,
     executor: TradeExecutor,
     feedback: FeedbackAnalyzer,
+    journal: StrategyJournal,
+    version_id: str,
     cycle: int,
-) -> None:
-    """Execute a single analysis-trade cycle for all configured symbols."""
-    logger.info("=== Cycle %d started ===", cycle)
+) -> str:
+    """Execute a single analysis-trade cycle for all configured symbols.
+
+    Returns the (possibly new) active *version_id*.
+    """
+    logger.info("=== Cycle %d started (strategy %s) ===", cycle, version_id)
 
     portfolio = await analyzer.get_portfolio_state()
 
@@ -38,18 +61,27 @@ async def run_cycle(
         "initial_capital": settings.initial_capital,
     }
 
+    # Build performance context for the prompt.
+    perf_summary = journal.get_performance_summary(version_id)
+
+    # Retrieve the previous version's iteration suggestion (if any).
+    active = journal.get_active_version()
+    iteration_suggestion = active.get("reasoning", "") if active else ""
+
     for symbol in settings.symbols:
         logger.info("Analyzing %s ...", symbol)
 
         # 1. Get market state
         market_summary = await analyzer.get_market_summary(symbol)
 
-        # 2. Build prompt
+        # 2. Build prompt (now with historical context)
         prompt = builder.build(
             persona=settings.persona,
             market_summary=market_summary,
             portfolio=portfolio,
             risk_constraints=risk_constraints,
+            performance_summary=perf_summary,
+            iteration_suggestion=iteration_suggestion,
         )
 
         # 3. LLM decision
@@ -62,33 +94,117 @@ async def run_cycle(
         if decision.get("analysis"):
             logger.info("Analysis: %s", decision["analysis"][:200])
 
-        # 4. Execute decisions
+        # 4. Record each sub-decision to journal and execute
         for d in decision.get("decisions", []):
-            if d.get("action") == "hold":
-                logger.info("Hold %s (confidence=%.2f)", d.get("symbol", symbol), d.get("confidence", 0))
+            action = d.get("action", "hold")
+            confidence = d.get("confidence", 0.0)
+            dec_symbol = d.get("symbol", symbol)
+
+            # Record the decision (including holds).
+            journal.record_decision(version_id, {
+                "cycle": cycle,
+                "symbol": dec_symbol,
+                "action": action,
+                "confidence": confidence,
+                "analysis": decision.get("analysis", ""),
+                "raw_response": json.dumps(decision, ensure_ascii=False),
+            })
+
+            if action == "hold":
+                logger.info("Hold %s (confidence=%.2f)", dec_symbol, confidence)
                 continue
+
             result = await executor.execute(d)
             logger.info(
                 "Execution result for %s %s: %s",
-                d.get("action"),
-                d.get("symbol", symbol),
+                action,
+                dec_symbol,
                 result.get("status"),
             )
 
-    # 5. Periodic feedback review (every 6 cycles)
-    if cycle > 0 and cycle % 6 == 0:
-        logger.info("Running performance review ...")
-        trades = await analyzer.get_recent_trades(limit=50)
-        review = await feedback.review_performance(llm, trades, portfolio)
-        logger.info("Performance review: %s", review.get("review", "")[:300])
+            # Record the trade.
+            journal.record_trade(version_id, {
+                "symbol": dec_symbol,
+                "action": action,
+                "price": d.get("stop_loss", 0.0),  # placeholder; real price from executor
+                "quantity": d.get("quantity", 0.0),
+                "reason": d.get("reason", ""),
+                "confidence": confidence,
+                "pnl": None,  # unknown until position closes
+            })
+
+    # 5. Strategy iteration check (every MIN_ITERATION_CYCLES cycles)
+    if cycle > 0 and cycle % MIN_ITERATION_CYCLES == 0:
+        version_id = await _maybe_iterate_strategy(
+            settings, llm, builder, journal, version_id, cycle
+        )
 
     logger.info("=== Cycle %d completed ===", cycle)
+    return version_id
+
+
+async def _maybe_iterate_strategy(
+    settings: AgentSettings,
+    llm: LLMClient,
+    builder: PromptBuilder,
+    journal: StrategyJournal,
+    version_id: str,
+    cycle: int,
+) -> str:
+    """Ask the LLM whether the current strategy should be iterated.
+
+    If yes, create a new version and return the new version_id; otherwise
+    return the existing one.
+    """
+    logger.info("Running strategy iteration review (cycle %d) ...", cycle)
+
+    perf_summary = journal.get_performance_summary(version_id)
+    params = _current_parameters(settings)
+
+    prompt = builder.build_iteration_prompt(
+        version_id=version_id,
+        performance_summary=perf_summary,
+        cycle_count=cycle,
+        current_parameters=params,
+    )
+
+    result = await llm.analyze(prompt)
+
+    should_iterate = result.get("should_iterate", False)
+    reason = result.get("iteration_reason", "")
+    analysis = result.get("analysis", "")
+
+    logger.info("Iteration review: should_iterate=%s, reason=%s", should_iterate, reason[:200])
+
+    if not should_iterate:
+        return version_id
+
+    # Apply new parameters to settings.
+    new_params = result.get("new_parameters", {})
+    if "persona" in new_params and new_params["persona"] in PromptBuilder.PERSONAS:
+        settings.persona = new_params["persona"]
+    if "stop_loss_pct" in new_params:
+        settings.stop_loss_pct = float(new_params["stop_loss_pct"])
+    if "max_position_pct" in new_params:
+        settings.max_position_pct = float(new_params["max_position_pct"])
+
+    # Create new strategy version.
+    merged_params = _current_parameters(settings)
+    new_version_id = journal.create_version(
+        persona=settings.persona,
+        model=settings.model,
+        parameters=merged_params,
+        reasoning=f"{analysis}\n\n调整原因: {reason}",
+    )
+
+    logger.info("Strategy iterated: %s -> %s", version_id, new_version_id)
+    return new_version_id
 
 
 async def run() -> None:
     settings = AgentSettings()
 
-    # Validate API key
+    # Validate API key.
     if not settings.openrouter_api_key:
         logger.error(
             "KAINEX_AGENT_OPENROUTER_API_KEY is not set. "
@@ -114,18 +230,30 @@ async def run() -> None:
     builder = PromptBuilder()
     executor = TradeExecutor(settings.engine_api_url)
     feedback_analyzer = FeedbackAnalyzer()
+    journal = StrategyJournal()
+
+    # Create initial strategy version.
+    version_id = journal.create_version(
+        persona=settings.persona,
+        model=settings.model,
+        parameters=_current_parameters(settings),
+        reasoning="初始策略版本",
+    )
+    logger.info("Active strategy version: %s", version_id)
 
     cycle = 0
     try:
         while True:
             try:
-                await run_cycle(
+                version_id = await run_cycle(
                     settings,
                     llm,
                     analyzer,
                     builder,
                     executor,
                     feedback_analyzer,
+                    journal,
+                    version_id,
                     cycle,
                 )
             except Exception:
@@ -142,6 +270,7 @@ async def run() -> None:
     finally:
         await analyzer.close()
         await executor.close()
+        journal.close()
         logger.info("Agent shutdown complete")
 
 

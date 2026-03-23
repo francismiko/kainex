@@ -1,5 +1,7 @@
 """Allow running as ``python -m agent``."""
 
-from agent.main import main
+from agent.cli import dispatch
 
-main()
+if not dispatch():
+    from agent.main import main
+    main()
