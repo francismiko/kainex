@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import akshare as ak
 
@@ -41,7 +42,7 @@ class AStockSource(AbstractDataSource):
         for _, row in df.iterrows():
             ts = datetime.fromisoformat(str(row["时间"]))
             if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
+                ts = ts.replace(tzinfo=ZoneInfo("Asia/Shanghai")).astimezone(timezone.utc)
             bars.append(
                 Bar(
                     symbol=symbol,

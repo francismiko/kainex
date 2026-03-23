@@ -60,3 +60,20 @@ class MarketDataStatusResponse(BaseModel):
     markets: list[MarketStatus]
     total_bars: int
     duckdb_size_mb: float
+
+
+class KeyEvent(BaseModel):
+    event: str
+    impact: str
+    symbols: list[str] = []
+
+
+class SentimentResponse(BaseModel):
+    overall_sentiment: str
+    confidence: float
+    key_events: list[KeyEvent] = []
+    risk_factors: list[str] = []
+    summary: str
+    news_count: int
+    analyzed_at: str
+    version_id: str

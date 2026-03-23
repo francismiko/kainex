@@ -24,6 +24,9 @@ class AgentSettings(BaseSettings):
     stop_loss_pct: float = 0.05
     initial_capital: float = 100_000.0
 
+    # News / Sentiment
+    finnhub_api_key: str = ""
+
     # Data
     duckdb_path: str = "../../data/kainex.duckdb"
 

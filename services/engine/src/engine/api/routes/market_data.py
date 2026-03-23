@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from engine.api.deps import get_duckdb_store
 from engine.api.schemas.market import (
     BarData,
+    KeyEvent,
     LatestQuote,
     MarketDataStatusResponse,
     MarketStatus,
+    SentimentResponse,
     SymbolInfo,
 )
 from engine.api.schemas.regime import RegimeResponse
@@ -96,7 +98,7 @@ async def list_symbols(
     market: str = Query("crypto", description="Market type"),
     duckdb_store: DuckDBStore = Depends(get_duckdb_store),
 ):
-    result = duckdb_store.execute(
+    result = duckdb_store._execute(
         "SELECT DISTINCT symbol, market FROM bars WHERE market = ? ORDER BY symbol",
         [market],
     )
@@ -126,7 +128,7 @@ async def market_data_status(
     now = datetime.now(timezone.utc)
 
     # Aggregate stats per market: symbols, count, min/max timestamp
-    result = duckdb_store.execute("""
+    result = duckdb_store._execute("""
         SELECT
             market,
             LIST(DISTINCT symbol ORDER BY symbol) AS symbols,
@@ -221,3 +223,43 @@ async def detect_regime(
         confidence=1.0,
         reason=_REGIME_DESCRIPTIONS.get(regime, ""),
     )
+
+
+@router.get("/sentiment", response_model=SentimentResponse | None)
+async def get_latest_sentiment():
+    """Return the latest sentiment analysis result from the Agent journal."""
+    import json
+    import sqlite3
+    from pathlib import Path
+
+    # The Agent journal DB lives relative to the engine working directory.
+    journal_path = Path("../agent/data/agent_journal.db")
+    if not journal_path.exists():
+        raise HTTPException(status_code=404, detail="Agent journal database not found")
+
+    conn = sqlite3.connect(str(journal_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT * FROM sentiment_snapshots ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="No sentiment data available")
+        d = dict(row)
+        return SentimentResponse(
+            overall_sentiment=d["overall_sentiment"],
+            confidence=d["confidence"],
+            key_events=[
+                KeyEvent(**evt)
+                for evt in json.loads(d["key_events"])
+            ],
+            risk_factors=json.loads(d["risk_factors"]),
+            summary=d["summary"],
+            news_count=d["news_count"],
+            analyzed_at=d["analyzed_at"],
+            version_id=d["version_id"],
+        )
+    except sqlite3.OperationalError:
+        raise HTTPException(status_code=404, detail="Sentiment table not found in journal")
+    finally:
+        conn.close()

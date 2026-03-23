@@ -490,7 +490,7 @@ class TestMarketData:
         _, mock_duckdb = _mock_stores
         result_mock = MagicMock()
         result_mock.fetchall.return_value = []
-        mock_duckdb.execute.return_value = result_mock
+        mock_duckdb._execute.return_value = result_mock
         resp = client.get("/api/market-data/symbols")
         assert resp.status_code == 200
         assert resp.json() == []
@@ -499,7 +499,7 @@ class TestMarketData:
         _, mock_duckdb = _mock_stores
         result_mock = MagicMock()
         result_mock.fetchall.return_value = [("BTC/USDT", "crypto"), ("ETH/USDT", "crypto")]
-        mock_duckdb.execute.return_value = result_mock
+        mock_duckdb._execute.return_value = result_mock
         resp = client.get("/api/market-data/symbols?market=crypto")
         assert resp.status_code == 200
         data = resp.json()

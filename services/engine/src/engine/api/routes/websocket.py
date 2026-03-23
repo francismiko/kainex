@@ -10,6 +10,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+MAX_CONNECTIONS = 100
+MAX_SUBSCRIPTIONS_PER_CONN = 20
+MAX_MOCK_TASKS = 50
+
 
 class ConnectionManager:
     """Manages WebSocket connections and channel subscriptions."""
@@ -24,9 +28,13 @@ class ConnectionManager:
     def disconnect(self, ws: WebSocket) -> None:
         self._connections.pop(ws, None)
 
-    def subscribe(self, ws: WebSocket, channel: str) -> None:
+    def subscribe(self, ws: WebSocket, channel: str) -> bool:
+        """Subscribe to a channel. Returns False if subscription limit reached."""
         if ws in self._connections:
+            if len(self._connections[ws]) >= MAX_SUBSCRIPTIONS_PER_CONN:
+                return False
             self._connections[ws].add(channel)
+        return True
 
     def unsubscribe(self, ws: WebSocket, channel: str) -> None:
         if ws in self._connections:
@@ -174,6 +182,11 @@ def _ensure_mock_task(channel: str) -> None:
     """Start a mock data generator for the channel if not already running."""
     if channel in _mock_tasks and not _mock_tasks[channel].done():
         return
+    # Enforce mock task limit
+    active_count = sum(1 for t in _mock_tasks.values() if not t.done())
+    if active_count >= MAX_MOCK_TASKS:
+        logger.warning("Mock task limit reached (%d), not starting new task for %s", MAX_MOCK_TASKS, channel)
+        return
 
     parts = channel.split(":")
     if parts[0] == "market" and len(parts) == 3:
@@ -218,6 +231,9 @@ def _parse_channel(channel: str) -> str | None:
 
 @router.websocket("/stream")
 async def stream(ws: WebSocket) -> None:
+    if manager.active_connections >= MAX_CONNECTIONS:
+        await ws.close(code=1013, reason="Too many connections")
+        return
     await manager.connect(ws)
     try:
         while True:
@@ -236,7 +252,9 @@ async def stream(ws: WebSocket) -> None:
                 if validated is None:
                     await ws.send_json({"error": f"invalid channel: {channel}"})
                     continue
-                manager.subscribe(ws, validated)
+                if not manager.subscribe(ws, validated):
+                    await ws.send_json({"error": f"subscription limit reached ({MAX_SUBSCRIPTIONS_PER_CONN})"})
+                    continue
                 _ensure_mock_task(validated)
                 await ws.send_json({"status": "subscribed", "channel": validated})
 
@@ -256,7 +274,9 @@ async def stream(ws: WebSocket) -> None:
                 if validated is None:
                     await ws.send_json({"error": f"invalid channel: {ch}"})
                     continue
-                manager.subscribe(ws, validated)
+                if not manager.subscribe(ws, validated):
+                    await ws.send_json({"error": f"subscription limit reached ({MAX_SUBSCRIPTIONS_PER_CONN})"})
+                    continue
                 _ensure_mock_task(validated)
                 await ws.send_json({"status": "subscribed", "channel": validated})
 

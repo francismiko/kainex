@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -46,7 +46,7 @@ class Ledger:
             quantity=quantity,
             price=price,
             commission=commission,
-            timestamp=datetime.now(),
+            timestamp=datetime.now(timezone.utc),
             pnl=pnl,
             metadata=metadata or {},
         )

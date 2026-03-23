@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import baostock as bs
 
@@ -88,15 +89,15 @@ class BaoStockSource(AbstractDataSource):
             if is_daily:
                 date_str, open_, high, low, close, volume = row
                 ts = datetime.strptime(date_str, "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc
-                )
+                    tzinfo=ZoneInfo("Asia/Shanghai")
+                ).astimezone(timezone.utc)
             else:
                 date_str, time_str, open_, high, low, close, volume = row
                 # time_str format: "20260115093500000"
                 ts_str = f"{date_str} {time_str[:8]}"
                 ts = datetime.strptime(ts_str, "%Y%m%d %H%M%S%f").replace(
-                    tzinfo=timezone.utc
-                )
+                    tzinfo=ZoneInfo("Asia/Shanghai")
+                ).astimezone(timezone.utc)
 
             if not open_ or not close:
                 continue

@@ -12,6 +12,7 @@ from agent.feedback import FeedbackAnalyzer
 from agent.llm import LLMClient
 from agent.market_analyzer import MarketAnalyzer
 from agent.prompt_builder import PromptBuilder
+from agent.sentiment import NewsFetcher, SentimentAnalyzer, SentimentResult
 from agent.strategy_journal import StrategyJournal
 
 logging.basicConfig(
@@ -44,6 +45,8 @@ async def run_cycle(
     executor: TradeExecutor,
     feedback: FeedbackAnalyzer,
     journal: StrategyJournal,
+    news_fetcher: NewsFetcher,
+    sentiment_analyzer: SentimentAnalyzer,
     version_id: str,
     cycle: int,
 ) -> str:
@@ -52,6 +55,23 @@ async def run_cycle(
     Returns the (possibly new) active *version_id*.
     """
     logger.info("=== Cycle %d started (strategy %s) ===", cycle, version_id)
+
+    # Fetch news and run sentiment analysis before market decisions.
+    sentiment: SentimentResult | None = None
+    try:
+        news_items = await news_fetcher.fetch_all(symbols=list(settings.symbols), limit=15)
+        logger.info("Fetched %d news items", len(news_items))
+        if news_items:
+            sentiment = await sentiment_analyzer.analyze(news_items)
+            logger.info(
+                "Sentiment: %s (confidence=%.2f) — %s",
+                sentiment.overall_sentiment,
+                sentiment.confidence,
+                sentiment.summary,
+            )
+            journal.record_sentiment(version_id, sentiment)
+    except Exception:
+        logger.exception("News/sentiment analysis failed, continuing without sentiment")
 
     portfolio = await analyzer.get_portfolio_state()
 
@@ -74,7 +94,7 @@ async def run_cycle(
         # 1. Get market state
         market_summary = await analyzer.get_market_summary(symbol)
 
-        # 2. Build prompt (now with historical context)
+        # 2. Build prompt (now with historical context + sentiment)
         prompt = builder.build(
             persona=settings.persona,
             market_summary=market_summary,
@@ -82,6 +102,7 @@ async def run_cycle(
             risk_constraints=risk_constraints,
             performance_summary=perf_summary,
             iteration_suggestion=iteration_suggestion,
+            sentiment=sentiment,
         )
 
         # 3. LLM decision
@@ -179,14 +200,29 @@ async def _maybe_iterate_strategy(
     if not should_iterate:
         return version_id
 
-    # Apply new parameters to settings.
+    # Apply new parameters to settings with hard validation limits.
+    _ALLOWED_PERSONAS = {"conservative", "balanced", "aggressive"}
     new_params = result.get("new_parameters", {})
-    if "persona" in new_params and new_params["persona"] in PromptBuilder.PERSONAS:
-        settings.persona = new_params["persona"]
+
+    if "persona" in new_params:
+        val = new_params["persona"]
+        if val in _ALLOWED_PERSONAS:
+            logger.info("Parameter change: persona %s -> %s", settings.persona, val)
+            settings.persona = val
+        else:
+            logger.warning("LLM suggested invalid persona '%s', ignoring", val)
+
     if "stop_loss_pct" in new_params:
-        settings.stop_loss_pct = float(new_params["stop_loss_pct"])
+        val = float(new_params["stop_loss_pct"])
+        val = max(0.01, min(0.15, val))
+        logger.info("Parameter change: stop_loss_pct %s -> %s", settings.stop_loss_pct, val)
+        settings.stop_loss_pct = val
+
     if "max_position_pct" in new_params:
-        settings.max_position_pct = float(new_params["max_position_pct"])
+        val = float(new_params["max_position_pct"])
+        val = max(0.1, min(0.9, val))
+        logger.info("Parameter change: max_position_pct %s -> %s", settings.max_position_pct, val)
+        settings.max_position_pct = val
 
     # Create new strategy version.
     merged_params = _current_parameters(settings)
@@ -231,6 +267,8 @@ async def run() -> None:
     executor = TradeExecutor(settings.engine_api_url)
     feedback_analyzer = FeedbackAnalyzer()
     journal = StrategyJournal()
+    news_fetcher = NewsFetcher(finnhub_api_key=settings.finnhub_api_key)
+    sentiment_analyzer = SentimentAnalyzer(llm_client=llm)
 
     # Create initial strategy version.
     version_id = journal.create_version(
@@ -253,6 +291,8 @@ async def run() -> None:
                     executor,
                     feedback_analyzer,
                     journal,
+                    news_fetcher,
+                    sentiment_analyzer,
                     version_id,
                     cycle,
                 )
@@ -270,6 +310,7 @@ async def run() -> None:
     finally:
         await analyzer.close()
         await executor.close()
+        await news_fetcher.close()
         journal.close()
         logger.info("Agent shutdown complete")
 

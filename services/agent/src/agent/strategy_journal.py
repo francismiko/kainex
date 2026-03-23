@@ -62,8 +62,22 @@ class StrategyJournal:
                 timestamp    TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS sentiment_snapshots (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                version_id      TEXT NOT NULL REFERENCES strategy_versions(version_id),
+                overall_sentiment TEXT NOT NULL,    -- bullish / bearish / neutral
+                confidence      REAL NOT NULL DEFAULT 0.0,
+                key_events      TEXT NOT NULL DEFAULT '[]',  -- JSON
+                risk_factors    TEXT NOT NULL DEFAULT '[]',  -- JSON
+                summary         TEXT NOT NULL DEFAULT '',
+                news_count      INTEGER NOT NULL DEFAULT 0,
+                analyzed_at     TEXT NOT NULL,
+                created_at      TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_trades_version ON trades(version_id);
             CREATE INDEX IF NOT EXISTS idx_decisions_version ON decisions(version_id);
+            CREATE INDEX IF NOT EXISTS idx_sentiment_version ON sentiment_snapshots(version_id);
         """)
         self._conn.commit()
 
@@ -205,6 +219,53 @@ class StrategyJournal:
             ),
         )
         self._conn.commit()
+
+    # ── Sentiment ─────────────────────────────────────────────────
+
+    def record_sentiment(self, version_id: str, result: object) -> None:
+        """Persist a sentiment analysis snapshot.
+
+        *result* should be a ``SentimentResult`` (duck-typed for testability).
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        self._conn.execute(
+            """
+            INSERT INTO sentiment_snapshots
+                (version_id, overall_sentiment, confidence, key_events,
+                 risk_factors, summary, news_count, analyzed_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                version_id,
+                getattr(result, "overall_sentiment", "neutral"),
+                getattr(result, "confidence", 0.0),
+                json.dumps(getattr(result, "key_events", []), ensure_ascii=False),
+                json.dumps(getattr(result, "risk_factors", []), ensure_ascii=False),
+                getattr(result, "summary", ""),
+                getattr(result, "news_count", 0),
+                getattr(result, "analyzed_at", now),
+                now,
+            ),
+        )
+        self._conn.commit()
+
+    def get_latest_sentiment(self, version_id: str | None = None) -> dict | None:
+        """Return the most recent sentiment snapshot."""
+        if version_id:
+            row = self._conn.execute(
+                "SELECT * FROM sentiment_snapshots WHERE version_id = ? ORDER BY created_at DESC LIMIT 1",
+                (version_id,),
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                "SELECT * FROM sentiment_snapshots ORDER BY created_at DESC LIMIT 1",
+            ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        d["key_events"] = json.loads(d["key_events"])
+        d["risk_factors"] = json.loads(d["risk_factors"])
+        return d
 
     def get_decisions(self, version_id: str, limit: int = 50) -> list[dict]:
         """Return recent decisions for a version."""

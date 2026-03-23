@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import yfinance as yf
 
@@ -42,7 +43,7 @@ class USStockSource(AbstractDataSource):
         for ts, row in df.iterrows():
             dt = ts.to_pydatetime()
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=ZoneInfo("America/New_York")).astimezone(timezone.utc)
             bars.append(
                 Bar(
                     symbol=symbol,
@@ -77,7 +78,7 @@ class USStockSource(AbstractDataSource):
         row = df.iloc[-1]
         dt = ts.to_pydatetime()
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=ZoneInfo("America/New_York")).astimezone(timezone.utc)
         return Bar(
             symbol=symbol,
             market=Market.US_STOCK,

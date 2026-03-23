@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent.sentiment.analyzer import SentimentResult
 
 
 class PromptBuilder:
@@ -33,6 +37,7 @@ class PromptBuilder:
         *,
         performance_summary: str = "",
         iteration_suggestion: str = "",
+        sentiment: SentimentResult | None = None,
     ) -> str:
         persona_desc = self.PERSONAS.get(persona, self.PERSONAS["balanced"])
 
@@ -48,6 +53,13 @@ class PromptBuilder:
             "## 风控约束",
             self._format_risk(risk_constraints),
         ]
+
+        if sentiment is not None and sentiment.news_count > 0:
+            sections += [
+                "",
+                "## 市场情绪",
+                self._format_sentiment(sentiment),
+            ]
 
         if performance_summary:
             sections += [
@@ -140,6 +152,24 @@ class PromptBuilder:
 3. 如果策略过于保守导致交易很少，可以适当放宽。
 4. new_parameters 中只包含需要修改的参数。
 """
+
+    @staticmethod
+    def _format_sentiment(sentiment: SentimentResult) -> str:
+        lines = [
+            f"- 整体情绪: {sentiment.overall_sentiment}",
+            f"- 置信度: {sentiment.confidence:.2f}",
+            f"- 摘要: {sentiment.summary}",
+            f"- 分析新闻数: {sentiment.news_count}",
+        ]
+        if sentiment.key_events:
+            lines.append("- 关键事件:")
+            for evt in sentiment.key_events[:5]:
+                lines.append(f"  - {evt.get('event', '?')} (影响: {evt.get('impact', '?')})")
+        if sentiment.risk_factors:
+            lines.append("- 风险因素:")
+            for rf in sentiment.risk_factors[:3]:
+                lines.append(f"  - {rf}")
+        return "\n".join(lines)
 
     @staticmethod
     def _format_market(summary: dict) -> str:

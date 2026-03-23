@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 
 import duckdb
@@ -10,6 +11,13 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_DB_PATH = Path(__file__).resolve().parents[5] / "data" / "kainex.duckdb"
 
+_ALLOWED_TABLES = {"bars", "ticks"}
+
+_PREDEFINED_EXPORT_QUERIES = {
+    "all_bars": "SELECT * FROM bars ORDER BY ts",
+    "all_ticks": "SELECT * FROM ticks ORDER BY ts",
+}
+
 
 class DuckDBStore:
     """Embedded DuckDB store for historical data analysis and backtest data."""
@@ -17,6 +25,7 @@ class DuckDBStore:
     def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path) if db_path else _DEFAULT_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
         self._conn = duckdb.connect(str(self.db_path))
         self._init_tables()
 
@@ -54,41 +63,60 @@ class DuckDBStore:
             query += " AND ts <= ?"
             params.append(end)
         query += " ORDER BY ts"
-        df = self._conn.execute(query, params).fetchdf()
+        with self._lock:
+            df = self._conn.execute(query, params).fetchdf()
         if not df.empty:
             df = df.set_index("ts")
         return df
 
     def import_parquet(self, file_path: str | Path, table_name: str = "bars") -> int:
         """Import a Parquet file into the specified table. Returns row count."""
+        if table_name not in _ALLOWED_TABLES:
+            raise ValueError(
+                f"Invalid table name '{table_name}'. Allowed: {_ALLOWED_TABLES}"
+            )
         file_path = Path(file_path)
         if not file_path.exists():
             raise FileNotFoundError(f"Parquet file not found: {file_path}")
-        result = self._conn.execute(
-            f"INSERT INTO {table_name} SELECT * FROM read_parquet(?)",
-            [str(file_path)],
-        )
-        count = result.fetchone()[0] if result.description else 0
+        with self._lock:
+            result = self._conn.execute(
+                f"INSERT INTO {table_name} SELECT * FROM read_parquet(?)",
+                [str(file_path)],
+            )
+            count = result.fetchone()[0] if result.description else 0
         logger.info("Imported %d rows from %s into %s", count, file_path, table_name)
         return count
 
-    def export_parquet(self, query: str, file_path: str | Path) -> None:
-        """Export a query result to a Parquet file."""
+    def export_parquet(self, query_name: str, file_path: str | Path) -> None:
+        """Export a predefined query result to a Parquet file.
+
+        Args:
+            query_name: Key in _PREDEFINED_EXPORT_QUERIES (e.g. "all_bars").
+            file_path: Destination Parquet file path.
+        """
+        query = _PREDEFINED_EXPORT_QUERIES.get(query_name)
+        if query is None:
+            raise ValueError(
+                f"Unknown query '{query_name}'. "
+                f"Allowed: {list(_PREDEFINED_EXPORT_QUERIES)}"
+            )
         file_path = Path(file_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn.execute(
-            f"COPY ({query}) TO ? (FORMAT PARQUET)",
-            [str(file_path)],
-        )
+        with self._lock:
+            self._conn.execute(
+                f"COPY ({query}) TO ? (FORMAT PARQUET)",
+                [str(file_path)],
+            )
         logger.info("Exported query result to %s", file_path)
 
-    def execute(
+    def _execute(
         self, query: str, params: list | None = None
     ) -> duckdb.DuckDBPyConnection:
-        """Execute an arbitrary SQL query."""
-        if params:
-            return self._conn.execute(query, params)
-        return self._conn.execute(query)
+        """Execute an arbitrary SQL query (internal use only)."""
+        with self._lock:
+            if params:
+                return self._conn.execute(query, params)
+            return self._conn.execute(query)
 
     def close(self) -> None:
         self._conn.close()

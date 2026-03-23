@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @dataclass
@@ -37,7 +37,7 @@ class PortfolioTracker:
 
     def snapshot(self) -> PortfolioSnapshot:
         snap = PortfolioSnapshot(
-            timestamp=datetime.now(),
+            timestamp=datetime.now(timezone.utc),
             cash=self.cash,
             positions={
                 sym: qty * self.prices.get(sym, 0.0)

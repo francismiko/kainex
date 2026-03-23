@@ -1,8 +1,12 @@
+import asyncio
 import itertools
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+
+MAX_COMBINATIONS = 500
+MAX_WINDOWS = 20
 
 from engine.api.deps import get_duckdb_store, get_sqlite_store, get_strategy_registry
 from engine.api.schemas.attribution import (
@@ -264,22 +268,33 @@ async def optimize_parameters(
     combos = list(itertools.product(*values))
     total_combinations = len(combos)
 
-    # Run grid search
-    market = _market_enum(req.market)
-    scored: list[tuple[dict, dict, float]] = []
-    for combo in combos:
-        params = dict(zip(keys, combo))
-        engine = BacktestEngine(initial_capital=req.initial_capital, market=market)
-        strategy_instance = strategy_cls(**params)
-        bt_result = engine.run(
-            strategy=strategy_instance,
-            data=df,
-            start=req.start_date,
-            end=req.end_date,
+    if total_combinations > MAX_COMBINATIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many parameter combinations ({total_combinations}). Max allowed: {MAX_COMBINATIONS}",
         )
-        metrics = bt_result.metrics or {}
-        metric_val = metrics.get(req.metric, 0.0)
-        scored.append((params, metrics, metric_val))
+
+    # Run grid search in a thread to avoid blocking the event loop
+    market = _market_enum(req.market)
+
+    def _run_grid_search() -> list[tuple[dict, dict, float]]:
+        results: list[tuple[dict, dict, float]] = []
+        for combo in combos:
+            params = dict(zip(keys, combo))
+            engine = BacktestEngine(initial_capital=req.initial_capital, market=market)
+            strategy_instance = strategy_cls(**params)
+            bt_result = engine.run(
+                strategy=strategy_instance,
+                data=df,
+                start=req.start_date,
+                end=req.end_date,
+            )
+            metrics = bt_result.metrics or {}
+            metric_val = metrics.get(req.metric, 0.0)
+            results.append((params, metrics, metric_val))
+        return results
+
+    scored = await asyncio.to_thread(_run_grid_search)
 
     # Sort by metric descending (higher is better)
     scored.sort(key=lambda x: x[2], reverse=True)
@@ -341,6 +356,12 @@ async def walk_forward_optimize(
             detail="No historical data available for the given parameters",
         )
 
+    if req.n_splits > MAX_WINDOWS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many walk-forward windows ({req.n_splits}). Max allowed: {MAX_WINDOWS}",
+        )
+
     market = _market_enum(req.market)
     engine = BacktestEngine(initial_capital=req.initial_capital, market=market)
     optimizer = WalkForwardOptimizer(
@@ -350,7 +371,8 @@ async def walk_forward_optimize(
     )
 
     try:
-        wf_result = optimizer.optimize(
+        wf_result = await asyncio.to_thread(
+            optimizer.optimize,
             strategy_cls=strategy_cls,
             data=df,
             param_grid=req.param_grid,

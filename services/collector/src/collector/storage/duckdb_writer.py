@@ -170,11 +170,15 @@ class DuckDBWriter:
             f"SELECT DISTINCT market, symbol FROM bars {where}", params
         ).fetchall()
 
+        parquet_base = Path(self._parquet_dir).resolve()
         for mkt, sym in combos:
             safe_sym = sym.replace("/", "_")
-            out_dir = Path(self._parquet_dir) / mkt
+            out_dir = parquet_base / mkt
             os.makedirs(out_dir, exist_ok=True)
-            out_path = out_dir / f"{safe_sym}.parquet"
+            out_path = (out_dir / f"{safe_sym}.parquet").resolve()
+            # Ensure output stays within the parquet directory
+            if not str(out_path).startswith(str(parquet_base)):
+                raise ValueError(f"Invalid export path: {out_path}")
             self._conn.execute(
                 f"""
                 COPY (
