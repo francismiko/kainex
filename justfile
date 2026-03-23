@@ -48,6 +48,10 @@ generate-types:
 smoke-test:
   ./scripts/smoke_test.sh
 
+# Run E2E browser tests
+e2e:
+  pnpm --filter @kainex/web test:e2e
+
 # ─── Build ─────────────────────────────────────────────────────
 
 # Build frontend
