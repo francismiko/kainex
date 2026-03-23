@@ -68,6 +68,14 @@ class KeyEvent(BaseModel):
     symbols: list[str] = []
 
 
+class OnChainMetricData(BaseModel):
+    metric_name: str
+    asset: str
+    value: float
+    source: str
+    timestamp: datetime
+
+
 class SentimentResponse(BaseModel):
     overall_sentiment: str
     confidence: float

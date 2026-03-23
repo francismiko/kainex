@@ -10,6 +10,7 @@ from engine.api.schemas.market import (
     LatestQuote,
     MarketDataStatusResponse,
     MarketStatus,
+    OnChainMetricData,
     SentimentResponse,
     SymbolInfo,
 )
@@ -223,6 +224,33 @@ async def detect_regime(
         confidence=1.0,
         reason=_REGIME_DESCRIPTIONS.get(regime, ""),
     )
+
+
+@router.get("/onchain", response_model=list[OnChainMetricData])
+async def get_onchain_metrics(
+    metric: str | None = Query(None, description="Metric name filter, e.g. stablecoin_supply"),
+    asset: str | None = Query(None, description="Asset filter, e.g. BTC, ALL"),
+    limit: int = Query(30, ge=1, le=1000, description="Max records to return"),
+    duckdb_store: DuckDBStore = Depends(get_duckdb_store),
+):
+    """Query on-chain metrics (crypto only)."""
+    df = duckdb_store.query_onchain_metrics(
+        metric_name=metric, asset=asset, limit=limit
+    )
+    if df.empty:
+        return []
+    results = []
+    for _, row in df.iterrows():
+        results.append(
+            OnChainMetricData(
+                metric_name=row["metric_name"],
+                asset=row["asset"],
+                value=row["value"],
+                source=row["source"],
+                timestamp=row["ts"],
+            )
+        )
+    return results
 
 
 @router.get("/sentiment", response_model=SentimentResponse | None)

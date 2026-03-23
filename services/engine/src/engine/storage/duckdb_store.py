@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_DB_PATH = Path(__file__).resolve().parents[5] / "data" / "kainex.duckdb"
 
-_ALLOWED_TABLES = {"bars", "ticks"}
+_ALLOWED_TABLES = {"bars", "ticks", "onchain_metrics"}
 
 _PREDEFINED_EXPORT_QUERIES = {
     "all_bars": "SELECT * FROM bars ORDER BY ts",
@@ -44,6 +44,16 @@ class DuckDBStore:
                 UNIQUE(symbol, market, timeframe, ts)
             )
         """)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS onchain_metrics (
+                metric_name VARCHAR NOT NULL,
+                asset       VARCHAR NOT NULL,
+                value       DOUBLE NOT NULL,
+                source      VARCHAR NOT NULL,
+                ts          TIMESTAMP NOT NULL,
+                UNIQUE(metric_name, asset, source, ts)
+            )
+        """)
 
     def query_bars(
         self,
@@ -67,6 +77,32 @@ class DuckDBStore:
             df = self._conn.execute(query, params).fetchdf()
         if not df.empty:
             df = df.set_index("ts")
+        return df
+
+    def query_onchain_metrics(
+        self,
+        metric_name: str | None = None,
+        asset: str | None = None,
+        limit: int = 100,
+    ) -> pd.DataFrame:
+        """Query onchain metrics, returning a DataFrame."""
+        query = "SELECT metric_name, asset, value, source, ts FROM onchain_metrics"
+        params: list = []
+        conditions: list[str] = []
+        if metric_name:
+            conditions.append("metric_name = ?")
+            params.append(metric_name)
+        if asset:
+            conditions.append("asset = ?")
+            params.append(asset)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY ts DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            df = self._conn.execute(query, params).fetchdf()
+        if not df.empty:
+            df = df.sort_values("ts")
         return df
 
     def import_parquet(self, file_path: str | Path, table_name: str = "bars") -> int:

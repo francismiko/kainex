@@ -125,6 +125,66 @@ class MarketAnalyzer:
             "price_vs_sma50": "above" if last > _safe_float(sma_50.iloc[-1], 0) else "below",
         }
 
+    # ── On-chain data (crypto only, via Engine API) ─────────────
+
+    async def get_onchain_summary(self) -> dict:
+        """Fetch on-chain metrics summary from Engine API."""
+        try:
+            # Stablecoin supply
+            supply_resp = await self._http.get(
+                "/api/market-data/onchain",
+                params={"metric": "stablecoin_supply", "asset": "ALL", "limit": 1},
+            )
+            supply_resp.raise_for_status()
+            supply_data = supply_resp.json()
+
+            # Weekly change
+            change_resp = await self._http.get(
+                "/api/market-data/onchain",
+                params={"metric": "stablecoin_supply_weekly_change_pct", "asset": "ALL", "limit": 1},
+            )
+            change_resp.raise_for_status()
+            change_data = change_resp.json()
+
+            # Fear & Greed
+            fng_resp = await self._http.get(
+                "/api/market-data/onchain",
+                params={"metric": "fear_greed_index", "asset": "BTC", "limit": 1},
+            )
+            fng_resp.raise_for_status()
+            fng_data = fng_resp.json()
+
+            # BTC active addresses
+            addr_resp = await self._http.get(
+                "/api/market-data/onchain",
+                params={"metric": "btc_active_addresses", "asset": "BTC", "limit": 30},
+            )
+            addr_resp.raise_for_status()
+            addr_data = addr_resp.json()
+
+            # Compute 30-day mean deviation for active addresses
+            addr_latest = None
+            addr_mean_deviation = None
+            if addr_data:
+                values = [d["value"] for d in addr_data]
+                addr_latest = values[-1]
+                if len(values) > 1:
+                    mean_val = sum(values) / len(values)
+                    if mean_val > 0:
+                        addr_mean_deviation = (addr_latest - mean_val) / mean_val * 100
+
+            return {
+                "available": True,
+                "stablecoin_supply": supply_data[0]["value"] if supply_data else None,
+                "stablecoin_weekly_change_pct": change_data[0]["value"] if change_data else None,
+                "fear_greed_index": fng_data[0]["value"] if fng_data else None,
+                "btc_active_addresses": addr_latest,
+                "btc_addr_mean_deviation_pct": addr_mean_deviation,
+            }
+        except Exception as exc:
+            logger.warning("Failed to fetch on-chain summary: %s", exc)
+            return {"available": False}
+
     # ── Portfolio (Engine API) ──────────────────────────────────
 
     async def get_portfolio_state(self) -> dict:

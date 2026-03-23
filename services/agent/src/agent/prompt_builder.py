@@ -38,6 +38,8 @@ class PromptBuilder:
         performance_summary: str = "",
         iteration_suggestion: str = "",
         sentiment: SentimentResult | None = None,
+        onchain_summary: dict | None = None,
+        market: str = "crypto",
     ) -> str:
         persona_desc = self.PERSONAS.get(persona, self.PERSONAS["balanced"])
 
@@ -59,6 +61,13 @@ class PromptBuilder:
                 "",
                 "## 市场情绪",
                 self._format_sentiment(sentiment),
+            ]
+
+        if market == "crypto" and onchain_summary and onchain_summary.get("available"):
+            sections += [
+                "",
+                "## 链上数据（仅加密货币）",
+                self._format_onchain(onchain_summary),
             ]
 
         if performance_summary:
@@ -172,6 +181,30 @@ class PromptBuilder:
         return "\n".join(lines)
 
     @staticmethod
+    def _format_onchain(summary: dict) -> str:
+        lines = []
+        supply = summary.get("stablecoin_supply")
+        if supply is not None:
+            supply_b = supply / 1e9
+            change = summary.get("stablecoin_weekly_change_pct")
+            change_str = f" (周变化: {change:+.1f}%)" if change is not None else ""
+            lines.append(f"- 稳定币供应: ${supply_b:.1f}B{change_str}")
+
+        fng = summary.get("fear_greed_index")
+        if fng is not None:
+            label = _fng_label(fng)
+            lines.append(f"- Fear & Greed: {fng:.0f} ({label})")
+
+        addr = summary.get("btc_active_addresses")
+        if addr is not None:
+            addr_k = addr / 1000
+            dev = summary.get("btc_addr_mean_deviation_pct")
+            dev_str = f" (30日均值偏离: {dev:+.1f}%)" if dev is not None else ""
+            lines.append(f"- BTC 活跃地址: {addr_k:.0f}K{dev_str}")
+
+        return "\n".join(lines) if lines else "- 链上数据不可用"
+
+    @staticmethod
     def _format_market(summary: dict) -> str:
         if not summary.get("available", False):
             return f"- {summary.get('symbol', '?')}: 数据不可用"
@@ -227,3 +260,15 @@ def _fmt(val: float | None) -> str:
     if val is None:
         return "N/A"
     return f"{val:.4f}"
+
+
+def _fng_label(value: float) -> str:
+    if value <= 25:
+        return "Extreme Fear"
+    if value <= 45:
+        return "Fear"
+    if value <= 55:
+        return "Neutral"
+    if value <= 75:
+        return "Greed"
+    return "Extreme Greed"

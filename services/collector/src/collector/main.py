@@ -10,12 +10,15 @@ from croniter import croniter
 from collector.config import settings
 from collector.jobs import eod as eod_mod
 from collector.jobs import intraday as intraday_mod
+from collector.jobs import onchain as onchain_mod
 from collector.jobs.eod import aggregate_eod
 from collector.jobs.intraday import (
     collect_astock_intraday,
     collect_crypto,
+    collect_funding_rates,
     collect_us_stock_intraday,
 )
+from collector.jobs.onchain import collect_onchain
 from collector.storage.duckdb_writer import DuckDBWriter
 
 logging.basicConfig(
@@ -51,6 +54,10 @@ class CollectorScheduler:
                 "crypto", s.crypto_interval_minutes * 60, collect_crypto
             ),
             self._schedule_cron("eod", "0 23 * * *", aggregate_eod),
+            self._schedule_interval("onchain", 3600, collect_onchain),
+            self._schedule_cron(
+                "funding_rates", "0 */8 * * *", collect_funding_rates
+            ),
         )
 
     async def _schedule_cron(self, name: str, expr: str, func) -> None:
@@ -86,6 +93,7 @@ async def run() -> None:
     # Inject writer into job modules
     intraday_mod.set_writer(writer)
     eod_mod.set_writer(writer)
+    onchain_mod.set_writer(writer)
 
     try:
         scheduler = CollectorScheduler(writer)

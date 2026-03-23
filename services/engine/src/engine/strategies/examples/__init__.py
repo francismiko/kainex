@@ -12,6 +12,8 @@ from engine.strategies.examples.dual_ma import DualMaStrategy
 from engine.strategies.examples.ml_signal import MLSignalStrategy
 from engine.strategies.examples.pairs_trading import PairsTradingStrategy
 from engine.strategies.examples.grid_trading import GridTradingStrategy
+from engine.strategies.examples.donchian_breakout import DonchianBreakoutStrategy
+from engine.strategies.examples.funding_rate_arb import FundingRateArbStrategy
 
 __all__ = [
     "SmaCrossoverLegacy",
@@ -24,4 +26,6 @@ __all__ = [
     "MLSignalStrategy",
     "PairsTradingStrategy",
     "GridTradingStrategy",
+    "DonchianBreakoutStrategy",
+    "FundingRateArbStrategy",
 ]

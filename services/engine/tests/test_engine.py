@@ -11,7 +11,7 @@ from engine.paper_trading.slippage import SlippageModel
 from engine.risk.manager import RiskManager
 from engine.risk.drawdown import DrawdownCircuitBreaker
 from engine.risk.position import PositionLimiter
-from engine.strategies.base import Signal, SignalType, Market
+from engine.strategies.base import Signal, SignalType, Market, TimeFrame
 from engine.strategies.examples.sma_crossover import SmaCrossoverLegacy
 from engine.strategies.examples.rsi_mean_reversion import RsiMeanReversion
 from engine.strategies.examples.bollinger_breakout import BollingerBreakout
@@ -20,6 +20,8 @@ from engine.strategies.examples.momentum import MomentumStrategy
 from engine.strategies.examples.dual_ma import DualMaStrategy
 from engine.strategies.examples.pairs_trading import PairsTradingStrategy
 from engine.strategies.examples.grid_trading import GridTradingStrategy
+from engine.strategies.examples.donchian_breakout import DonchianBreakoutStrategy
+from engine.strategies.examples.funding_rate_arb import FundingRateArbStrategy
 from engine.core.runner import StrategyRunner
 
 
@@ -338,7 +340,10 @@ class TestSmaCrossoverStrategy:
 class TestRsiMeanReversion:
     def test_parameters(self):
         s = RsiMeanReversion(rsi_period=10, oversold=25.0, overbought=75.0)
-        assert s.parameters() == {"rsi_period": 10, "oversold": 25.0, "overbought": 75.0}
+        p = s.parameters()
+        assert p["rsi_period"] == 10
+        assert p["oversold"] == 25.0
+        assert p["overbought"] == 75.0
 
     def test_buy_on_oversold(self):
         s = RsiMeanReversion()
@@ -1213,3 +1218,505 @@ class TestGridTradingStrategy:
         assert s._initialized
         # Grid lines should be around 200
         assert any(abs(g - 200.0) < 0.01 for g in s._grid_lines)
+
+
+# --------------- Enhanced RsiMeanReversion ---------------
+
+class TestEnhancedRsiMeanReversion:
+    def test_parameters_backward_compat(self):
+        """Default-only init still works; new params have defaults."""
+        s = RsiMeanReversion()
+        p = s.parameters()
+        assert p["rsi_period"] == 14
+        assert p["min_bbw"] == 0.02
+        assert p["max_adx"] == 25.0
+        assert p["exit_rsi"] == 50.0
+        assert p["max_hold_bars"] == 10
+        assert p["atr_multiplier"] == 2.0
+        assert p["risk_pct"] == 0.01
+
+    def test_parameters_custom(self):
+        s = RsiMeanReversion(rsi_period=10, oversold=25.0, overbought=75.0,
+                             min_bbw=0.03, max_adx=30.0, exit_rsi=55.0,
+                             max_hold_bars=5, atr_multiplier=1.5, risk_pct=0.02)
+        p = s.parameters()
+        assert p == {
+            "rsi_period": 10, "oversold": 25.0, "overbought": 75.0,
+            "min_bbw": 0.03, "max_adx": 30.0, "exit_rsi": 55.0,
+            "max_hold_bars": 5, "atr_multiplier": 1.5, "risk_pct": 0.02,
+        }
+
+    def test_buy_oversold_no_filter(self):
+        """Buy triggers when RSI oversold and no filter data present (legacy mode)."""
+        s = RsiMeanReversion()
+        bar = pd.Series({"close": 100.0, "rsi": 20.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_sell_overbought(self):
+        s = RsiMeanReversion()
+        bar = pd.Series({"close": 100.0, "rsi": 80.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+
+    def test_no_signal_neutral(self):
+        s = RsiMeanReversion()
+        bar = pd.Series({"close": 100.0, "rsi": 50.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+    def test_no_signal_without_rsi(self):
+        s = RsiMeanReversion()
+        bar = pd.Series({"close": 100.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+    def test_bbw_filter_blocks_entry(self):
+        """When BBW < min_bbw the entry should be blocked."""
+        s = RsiMeanReversion(min_bbw=0.05)
+        bar = pd.Series({"close": 100.0, "rsi": 20.0, "bbw": 0.01, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+    def test_adx_filter_blocks_entry(self):
+        """When ADX > max_adx (strong trend) the entry should be blocked."""
+        s = RsiMeanReversion(max_adx=25.0)
+        bar = pd.Series({"close": 100.0, "rsi": 20.0, "adx": 40.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+    def test_filters_pass_allows_entry(self):
+        """Entry when both filters pass."""
+        s = RsiMeanReversion(min_bbw=0.02, max_adx=25.0)
+        bar = pd.Series({"close": 100.0, "rsi": 20.0, "bbw": 0.05, "adx": 15.0,
+                         "atr": 2.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+        assert signals[0].stop_loss is not None
+
+    def test_exit_on_rsi_recovery(self):
+        """After entering, should exit when RSI > exit_rsi."""
+        s = RsiMeanReversion(exit_rsi=50.0)
+        # Entry
+        entry_bar = pd.Series({"close": 100.0, "rsi": 20.0, "symbol": "TEST"})
+        s.on_bar(entry_bar)
+        assert s._in_position
+        # Exit
+        exit_bar = pd.Series({"close": 105.0, "rsi": 55.0, "symbol": "TEST"})
+        signals = s.on_bar(exit_bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+        assert signals[0].metadata["reason"] == "exit_rsi"
+        assert not s._in_position
+
+    def test_exit_on_max_hold(self):
+        """Should exit after max_hold_bars even if RSI stays low."""
+        s = RsiMeanReversion(max_hold_bars=3, exit_rsi=80.0)
+        # Entry
+        s.on_bar(pd.Series({"close": 100.0, "rsi": 20.0, "symbol": "TEST"}))
+        # Bars 1 and 2: RSI still low, no exit
+        s.on_bar(pd.Series({"close": 101.0, "rsi": 35.0, "symbol": "TEST"}))
+        s.on_bar(pd.Series({"close": 102.0, "rsi": 40.0, "symbol": "TEST"}))
+        # Bar 3: max_hold reached
+        signals = s.on_bar(pd.Series({"close": 103.0, "rsi": 45.0, "symbol": "TEST"}))
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+        assert signals[0].metadata["reason"] == "max_hold"
+
+    def test_atr_position_sizing(self):
+        """Quantity should be based on ATR when available."""
+        s = RsiMeanReversion(risk_pct=0.01, atr_multiplier=2.0)
+        bar = pd.Series({"close": 100.0, "rsi": 20.0, "atr": 2.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        # equity=100_000 * 0.01 / (2.0 * 2.0) = 250
+        assert signals[0].quantity == 250.0
+
+    def test_stop_loss_calculation(self):
+        """Stop loss = close - atr_multiplier * ATR."""
+        s = RsiMeanReversion(atr_multiplier=2.0)
+        bar = pd.Series({"close": 100.0, "rsi": 20.0, "atr": 3.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert signals[0].stop_loss == pytest.approx(94.0)
+
+
+# --------------- DonchianBreakoutStrategy ---------------
+
+class TestDonchianBreakoutStrategy:
+    def test_parameters(self):
+        s = DonchianBreakoutStrategy(entry_period=30, exit_period=15, atr_period=14,
+                                      atr_stop_multiplier=3.0, trend_filter=False,
+                                      risk_pct=0.02)
+        assert s.parameters() == {
+            "entry_period": 30, "exit_period": 15, "atr_period": 14,
+            "atr_stop_multiplier": 3.0, "trend_filter": False, "risk_pct": 0.02,
+        }
+
+    def test_default_parameters(self):
+        s = DonchianBreakoutStrategy()
+        p = s.parameters()
+        assert p["entry_period"] == 20
+        assert p["exit_period"] == 10
+        assert p["trend_filter"] is True
+
+    def test_no_signal_insufficient_data(self):
+        """Should not signal until entry_period bars are accumulated."""
+        s = DonchianBreakoutStrategy(entry_period=5, trend_filter=False)
+        for i in range(4):
+            bar = pd.Series({"close": 100.0 + i, "high": 101.0 + i,
+                             "low": 99.0 + i, "symbol": "TEST"})
+            assert s.on_bar(bar) == []
+
+    def test_no_signal_without_ohlc(self):
+        s = DonchianBreakoutStrategy()
+        bar = pd.Series({"symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+    def test_long_breakout_no_trend_filter(self):
+        """Price above upper channel triggers long entry (trend_filter=False)."""
+        s = DonchianBreakoutStrategy(entry_period=5, trend_filter=False)
+        # Feed 5 bars with a range of 100-104
+        for i in range(5):
+            bar = pd.Series({"close": 100.0 + i, "high": 101.0 + i,
+                             "low": 99.0 + i, "symbol": "TEST"})
+            s.on_bar(bar)
+        # Bar 6: close > max(highs[-5:]) = 105
+        bar = pd.Series({"close": 106.0, "high": 107.0, "low": 105.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_short_breakout_no_trend_filter(self):
+        """Price below lower channel triggers short entry."""
+        s = DonchianBreakoutStrategy(entry_period=5, trend_filter=False)
+        for i in range(5):
+            bar = pd.Series({"close": 100.0 - i, "high": 101.0 - i,
+                             "low": 99.0 - i, "symbol": "TEST"})
+            s.on_bar(bar)
+        # Bar 6: close < min(lows[-5:]) = 95
+        bar = pd.Series({"close": 93.0, "high": 94.0, "low": 92.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+
+    def test_trend_filter_blocks_entry(self):
+        """With trend_filter=True and wrong EMA alignment, no entry."""
+        s = DonchianBreakoutStrategy(entry_period=5, trend_filter=True)
+        for i in range(5):
+            bar = pd.Series({"close": 100.0 + i, "high": 101.0 + i,
+                             "low": 99.0 + i, "symbol": "TEST"})
+            s.on_bar(bar)
+        # Breakout above upper channel but EMAs in wrong order
+        bar = pd.Series({"close": 106.0, "high": 107.0, "low": 105.0,
+                         "ema_8": 100.0, "ema_21": 102.0, "ema_50": 101.0,
+                         "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+    def test_trend_filter_allows_entry(self):
+        """With trend_filter=True and correct EMA alignment, entry succeeds."""
+        s = DonchianBreakoutStrategy(entry_period=5, trend_filter=True)
+        for i in range(5):
+            bar = pd.Series({"close": 100.0 + i, "high": 101.0 + i,
+                             "low": 99.0 + i, "symbol": "TEST"})
+            s.on_bar(bar)
+        bar = pd.Series({"close": 106.0, "high": 107.0, "low": 105.0,
+                         "ema_8": 106.0, "ema_21": 104.0, "ema_50": 102.0,
+                         "atr": 1.5, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+        assert signals[0].stop_loss is not None
+
+    def test_exit_long_on_exit_channel(self):
+        """Long position exits when price drops below exit lower channel."""
+        s = DonchianBreakoutStrategy(entry_period=5, exit_period=3, trend_filter=False)
+        # Build up 5 bars
+        for i in range(5):
+            bar = pd.Series({"close": 100.0 + i, "high": 101.0 + i,
+                             "low": 99.0 + i, "symbol": "TEST"})
+            s.on_bar(bar)
+        # Enter long
+        bar = pd.Series({"close": 106.0, "high": 107.0, "low": 105.0, "symbol": "TEST"})
+        s.on_bar(bar)
+        assert s._position == 1
+        # Price drops below exit lower channel (min of last 3 lows)
+        bar = pd.Series({"close": 90.0, "high": 91.0, "low": 89.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+        assert s._position == 0
+
+    def test_atr_expansion_halves_quantity(self):
+        """When ATR is expanding, quantity should be halved."""
+        s = DonchianBreakoutStrategy(entry_period=5, trend_filter=False, risk_pct=0.01)
+        # Feed 20 bars with stable ATR to build ATR history
+        for i in range(20):
+            bar = pd.Series({"close": 100.0, "high": 101.0, "low": 99.0,
+                             "atr": 1.0, "symbol": "TEST"})
+            s.on_bar(bar)
+        # Now feed bars to push entry, with ATR spike > 1.5x MA
+        bar = pd.Series({"close": 110.0, "high": 111.0, "low": 109.0,
+                         "atr": 2.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        # Normal qty: 100_000 * 0.01 / (2.0 * 2.0) = 250
+        # Halved: 125
+        assert signals[0].quantity == 125.0
+
+    def test_stop_loss_on_long(self):
+        """Long entry stop_loss = close - atr_stop_multiplier * ATR."""
+        s = DonchianBreakoutStrategy(entry_period=5, trend_filter=False,
+                                      atr_stop_multiplier=2.0)
+        for i in range(5):
+            bar = pd.Series({"close": 100.0 + i, "high": 101.0 + i,
+                             "low": 99.0 + i, "symbol": "TEST"})
+            s.on_bar(bar)
+        bar = pd.Series({"close": 106.0, "high": 107.0, "low": 105.0,
+                         "atr": 3.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert signals[0].stop_loss == pytest.approx(100.0)
+
+    def test_markets_and_timeframes(self):
+        s = DonchianBreakoutStrategy()
+        assert Market.A_STOCK in s.markets
+        assert Market.CRYPTO in s.markets
+        assert Market.US_STOCK in s.markets
+        assert TimeFrame.H4 in s.timeframes
+        assert TimeFrame.D1 in s.timeframes
+
+
+# --------------- FundingRateArbStrategy ---------------
+
+class TestFundingRateArbStrategy:
+    def test_parameters(self):
+        s = FundingRateArbStrategy(
+            min_funding_rate=0.001,
+            consecutive_positive=5,
+            exit_rate_threshold=0.0002,
+            max_position_pct=0.5,
+        )
+        assert s.parameters() == {
+            "min_funding_rate": 0.001,
+            "consecutive_positive": 5,
+            "exit_rate_threshold": 0.0002,
+            "max_position_pct": 0.5,
+        }
+
+    def test_crypto_only(self):
+        s = FundingRateArbStrategy()
+        assert s.markets == [Market.CRYPTO]
+        assert TimeFrame.H4 in s.timeframes
+        assert TimeFrame.D1 in s.timeframes
+
+    def test_entry_on_consecutive_high_funding_rates(self):
+        """Should enter when N consecutive rates exceed min_funding_rate."""
+        s = FundingRateArbStrategy(min_funding_rate=0.0005, consecutive_positive=3)
+        # Feed 3 bars with high funding rates
+        for i in range(3):
+            bar = pd.Series({
+                "close": 50000.0,
+                "high": 50100.0,
+                "low": 49900.0,
+                "symbol": "BTC/USDT",
+                "funding_rate": 0.001,
+            })
+            signals = s.on_bar(bar)
+
+        # Third bar should trigger entry
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+        assert signals[0].metadata["type"] == "funding_arb"
+        assert signals[0].metadata["hedge"] == "short_perp"
+        assert signals[0].metadata["action"] == "entry"
+
+    def test_no_entry_below_threshold(self):
+        """Should not enter when funding rates are below min threshold."""
+        s = FundingRateArbStrategy(min_funding_rate=0.0005, consecutive_positive=3)
+        for _ in range(5):
+            bar = pd.Series({
+                "close": 50000.0,
+                "high": 50100.0,
+                "low": 49900.0,
+                "symbol": "BTC/USDT",
+                "funding_rate": 0.0003,  # Below threshold
+            })
+            signals = s.on_bar(bar)
+        assert len(signals) == 0
+
+    def test_no_entry_interrupted_consecutive(self):
+        """A low rate in the middle resets the consecutive count."""
+        s = FundingRateArbStrategy(min_funding_rate=0.0005, consecutive_positive=3)
+        # Two high, one low, two high -> no entry
+        rates = [0.001, 0.001, 0.0002, 0.001, 0.001]
+        for rate in rates:
+            bar = pd.Series({
+                "close": 50000.0, "high": 50100.0, "low": 49900.0,
+                "symbol": "BTC/USDT", "funding_rate": rate,
+            })
+            signals = s.on_bar(bar)
+        assert len(signals) == 0
+
+    def test_exit_on_negative_rate(self):
+        """Should exit immediately when funding rate goes negative."""
+        s = FundingRateArbStrategy(min_funding_rate=0.0005, consecutive_positive=2)
+        # Enter position
+        for _ in range(2):
+            bar = pd.Series({
+                "close": 50000.0, "high": 50100.0, "low": 49900.0,
+                "symbol": "BTC/USDT", "funding_rate": 0.001,
+            })
+            s.on_bar(bar)
+        assert s._in_position
+
+        # Negative rate -> immediate exit
+        bar = pd.Series({
+            "close": 50000.0, "high": 50100.0, "low": 49900.0,
+            "symbol": "BTC/USDT", "funding_rate": -0.001,
+        })
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+        assert signals[0].metadata["reason"] == "negative_rate"
+        assert not s._in_position
+
+    def test_exit_on_consecutive_below_threshold(self):
+        """Should exit after 2 consecutive periods below exit threshold."""
+        s = FundingRateArbStrategy(
+            min_funding_rate=0.0005,
+            consecutive_positive=2,
+            exit_rate_threshold=0.0001,
+        )
+        # Enter position
+        for _ in range(2):
+            bar = pd.Series({
+                "close": 50000.0, "high": 50100.0, "low": 49900.0,
+                "symbol": "BTC/USDT", "funding_rate": 0.001,
+            })
+            s.on_bar(bar)
+        assert s._in_position
+
+        # First period below threshold: no exit yet
+        bar = pd.Series({
+            "close": 50000.0, "high": 50100.0, "low": 49900.0,
+            "symbol": "BTC/USDT", "funding_rate": 0.00005,
+        })
+        signals = s.on_bar(bar)
+        assert len(signals) == 0
+        assert s._in_position
+
+        # Second period below threshold: exit
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+        assert signals[0].metadata["reason"] == "below_threshold"
+
+    def test_no_exit_if_rate_recovers(self):
+        """If rate goes above threshold after 1 period below, reset counter."""
+        s = FundingRateArbStrategy(
+            min_funding_rate=0.0005,
+            consecutive_positive=2,
+            exit_rate_threshold=0.0001,
+        )
+        # Enter
+        for _ in range(2):
+            bar = pd.Series({
+                "close": 50000.0, "high": 50100.0, "low": 49900.0,
+                "symbol": "BTC/USDT", "funding_rate": 0.001,
+            })
+            s.on_bar(bar)
+
+        # One period below threshold
+        bar = pd.Series({
+            "close": 50000.0, "high": 50100.0, "low": 49900.0,
+            "symbol": "BTC/USDT", "funding_rate": 0.00005,
+        })
+        s.on_bar(bar)
+
+        # Rate recovers
+        bar = pd.Series({
+            "close": 50000.0, "high": 50100.0, "low": 49900.0,
+            "symbol": "BTC/USDT", "funding_rate": 0.0005,
+        })
+        signals = s.on_bar(bar)
+        assert len(signals) == 0
+        assert s._in_position
+
+    def test_cumulative_funding_tracked(self):
+        """Cumulative funding should accumulate while in position."""
+        s = FundingRateArbStrategy(min_funding_rate=0.0005, consecutive_positive=2)
+        # Enter
+        for _ in range(2):
+            bar = pd.Series({
+                "close": 50000.0, "high": 50100.0, "low": 49900.0,
+                "symbol": "BTC/USDT", "funding_rate": 0.001,
+            })
+            s.on_bar(bar)
+        # Hold for one more period
+        bar = pd.Series({
+            "close": 50000.0, "high": 50100.0, "low": 49900.0,
+            "symbol": "BTC/USDT", "funding_rate": 0.001,
+        })
+        s.on_bar(bar)
+        assert s._cumulative_funding == pytest.approx(0.001 * 50000.0)
+
+        # Exit -> metadata includes cumulative funding
+        bar = pd.Series({
+            "close": 50000.0, "high": 50100.0, "low": 49900.0,
+            "symbol": "BTC/USDT", "funding_rate": -0.001,
+        })
+        signals = s.on_bar(bar)
+        expected_total = 0.001 * 50000.0 + (-0.001) * 50000.0
+        assert signals[0].metadata["cumulative_funding"] == pytest.approx(expected_total)
+
+    def test_estimated_funding_rate_when_missing(self):
+        """When funding_rate is not in bar, should estimate from volatility."""
+        s = FundingRateArbStrategy(min_funding_rate=0.0, consecutive_positive=1)
+        # Bar without funding_rate but with price data
+        bar = pd.Series({
+            "close": 100.0, "high": 110.0, "low": 90.0,
+            "symbol": "BTC/USDT",
+        })
+        signals = s.on_bar(bar)
+        # Estimated rate = (110-90)/100 * 0.01 = 0.002 > 0 -> entry
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_reentry_after_exit(self):
+        """After exiting, should be able to re-enter on new high funding rates."""
+        s = FundingRateArbStrategy(min_funding_rate=0.0005, consecutive_positive=2)
+        # Enter
+        for _ in range(2):
+            bar = pd.Series({
+                "close": 50000.0, "high": 50100.0, "low": 49900.0,
+                "symbol": "BTC/USDT", "funding_rate": 0.001,
+            })
+            s.on_bar(bar)
+        assert s._in_position
+
+        # Exit on negative
+        bar = pd.Series({
+            "close": 50000.0, "high": 50100.0, "low": 49900.0,
+            "symbol": "BTC/USDT", "funding_rate": -0.001,
+        })
+        s.on_bar(bar)
+        assert not s._in_position
+
+        # Re-enter
+        for _ in range(2):
+            bar = pd.Series({
+                "close": 51000.0, "high": 51100.0, "low": 50900.0,
+                "symbol": "BTC/USDT", "funding_rate": 0.002,
+            })
+            signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_missing_close_returns_empty(self):
+        """Bar without close should return no signals."""
+        s = FundingRateArbStrategy()
+        bar = pd.Series({"symbol": "BTC/USDT", "funding_rate": 0.001})
+        assert s.on_bar(bar) == []
+
+    def test_registry_registration(self):
+        """Strategy should be registered in the global registry."""
+        from engine.strategies.registry import registry
+        assert "funding_rate_arb" in registry.list_strategies()

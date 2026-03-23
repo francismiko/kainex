@@ -9,6 +9,7 @@ import duckdb
 
 from collector.config import settings
 from collector.models.bar import Bar
+from collector.models.onchain import OnChainMetric
 from collector.models.tick import Tick
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,23 @@ CREATE TABLE IF NOT EXISTS ticks (
     bid    DOUBLE NOT NULL,
     ask    DOUBLE NOT NULL,
     ts     TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS onchain_metrics (
+    metric_name VARCHAR NOT NULL,
+    asset       VARCHAR NOT NULL,
+    value       DOUBLE NOT NULL,
+    source      VARCHAR NOT NULL,
+    ts          TIMESTAMP NOT NULL,
+    UNIQUE(metric_name, asset, source, ts)
+);
+
+CREATE TABLE IF NOT EXISTS funding_rates (
+    symbol            VARCHAR NOT NULL,
+    rate              DOUBLE NOT NULL,
+    next_funding_time VARCHAR,
+    ts                TIMESTAMP NOT NULL,
+    UNIQUE(symbol, ts)
 );
 """
 
@@ -112,6 +130,77 @@ class DuckDBWriter:
                     tick.ask,
                     tick.timestamp,
                 ),
+            )
+
+    def write_onchain_metric(self, metric: OnChainMetric) -> None:
+        self.write_onchain_metrics([metric])
+
+    def write_onchain_metrics(self, metrics: list[OnChainMetric]) -> None:
+        if not metrics:
+            return
+        if self._conn is None:
+            raise RuntimeError("DuckDBWriter not connected — call connect() first")
+        records = [
+            (m.metric_name, m.asset, m.value, m.source, m.timestamp)
+            for m in metrics
+        ]
+        with self._lock:
+            self._conn.executemany(
+                """
+                INSERT OR IGNORE INTO onchain_metrics (metric_name, asset, value, source, ts)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                records,
+            )
+
+    def query_onchain_metrics(
+        self,
+        metric_name: str | None = None,
+        asset: str | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        if self._conn is None:
+            raise RuntimeError("DuckDBWriter not connected — call connect() first")
+        where_clauses: list[str] = []
+        params: list[str | int] = []
+        if metric_name:
+            where_clauses.append("metric_name = ?")
+            params.append(metric_name)
+        if asset:
+            where_clauses.append("asset = ?")
+            params.append(asset)
+        where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        params.append(limit)
+        result = self._conn.execute(
+            f"""
+            SELECT metric_name, asset, value, source, ts
+            FROM onchain_metrics
+            {where}
+            ORDER BY ts DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        columns = ["metric_name", "asset", "value", "source", "timestamp"]
+        return [dict(zip(columns, row)) for row in reversed(result)]
+
+    def write_funding_rates(self, rates: list[dict]) -> None:
+        """Write funding rate records. Each dict must have: symbol, rate, next_funding_time, timestamp."""
+        if not rates:
+            return
+        if self._conn is None:
+            raise RuntimeError("DuckDBWriter not connected — call connect() first")
+        records = [
+            (r["symbol"], r["rate"], r.get("next_funding_time"), r["timestamp"])
+            for r in rates
+        ]
+        with self._lock:
+            self._conn.executemany(
+                """
+                INSERT OR IGNORE INTO funding_rates (symbol, rate, next_funding_time, ts)
+                VALUES (?, ?, ?, ?)
+                """,
+                records,
             )
 
     def query_bars(

@@ -12,6 +12,7 @@ dependencies = [
     "akshare",
     "ccxt",
     "yfinance",
+    "httpx",
     "pydantic",
     "pydantic-settings",
     "exchange-calendars",

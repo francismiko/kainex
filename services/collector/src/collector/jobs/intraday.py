@@ -121,3 +121,21 @@ async def collect_crypto() -> None:
             logger.info("Crypto bar collected: %s", bar.symbol)
         except Exception:
             logger.exception("Failed to collect crypto %s", symbol)
+
+
+async def collect_funding_rates() -> None:
+    """Collect funding rates for crypto perpetual contracts (every 8h)."""
+    from collector.sources.funding_rate import FundingRateSource
+
+    source = FundingRateSource()
+    writer = _get_writer()
+
+    # Use the same crypto symbols but with perpetual suffixes if needed
+    symbols = settings.crypto_symbols
+    try:
+        rates = await source.fetch_funding_rates(symbols)
+        if rates:
+            await asyncio.to_thread(writer.write_funding_rates, rates)
+            logger.info("Funding rates collected for %d symbols", len(rates))
+    except Exception:
+        logger.exception("Failed to collect funding rates")
