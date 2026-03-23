@@ -3,7 +3,7 @@
 ![License](https://img.shields.io/github/license/francismiko/kainex)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![React](https://img.shields.io/badge/React-19-blue)
-![Tests](https://img.shields.io/badge/Tests-133%20passing-green)
+![Tests](https://img.shields.io/badge/Tests-169%20passing-green)
 
 > The edge you engineer. -- Open-source multi-market quantitative trading platform.
 
@@ -18,9 +18,12 @@ Kainex 是一个开源的多市场量化交易平台，支持 A 股、加密货�
 - **Backtest engine** -- High-performance vectorized backtesting with equity curves, Sharpe/Sortino/Calmar ratios, and parameter optimization
 - **Paper trading** -- Realistic simulation with slippage model, per-market commission rules (A-share stamp tax, T+1), and order management
 - **Risk management** -- Position sizing limits, drawdown circuit breaker, max exposure controls
-- **6 built-in strategies** -- SMA crossover, dual MA, RSI mean reversion, Bollinger breakout, MACD crossover, momentum -- all ready to extend
+- **7 built-in strategies** -- SMA crossover, dual MA, RSI mean reversion, Bollinger breakout, MACD crossover, momentum, ML signal -- all ready to extend
+- **Parameter optimization** -- Grid search with heatmap visualization, ranked by Sharpe/return/win rate
 - **NautilusTrader integration** -- Bridge interface (`KainexStrategy`) for running strategies on the NautilusTrader engine
-- **ML-ready** -- Feature store and model registry for machine learning model inference
+- **ML pipeline** -- Feature store (25+ features), model registry (versioned), ML predictor with RandomForest example
+- **Technical indicators** -- SMA, EMA, Bollinger Bands, RSI, MACD, Volume -- overlaid on K-line charts
+- **Strategy comparison** -- Side-by-side backtest comparison with equity curve overlay
 - **Real-time dashboard** -- K-line charts (TradingView Lightweight Charts), portfolio PnL, strategy monitoring, drawdown visualization, monthly return heatmap
 - **WebSocket streaming** -- Real-time market data and strategy signal subscriptions
 - **REST API** -- Full CRUD for strategies, backtests, portfolio, and market data
