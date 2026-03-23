@@ -2,7 +2,17 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from engine.api.deps import get_portfolio_tracker, get_sqlite_store
+from engine.api.deps import get_duckdb_store, get_portfolio_tracker, get_sqlite_store
+from engine.api.schemas.attribution import (
+    AttributionResponse,
+    AttributionSummary,
+    CostAnalysis,
+    RegimeStats,
+    SignalStats,
+    TimingCounts,
+    TimingQuality,
+    TradeAttributionItem,
+)
 from engine.api.schemas.portfolio import (
     PerformanceMetrics,
     PortfolioSummary,
@@ -11,7 +21,10 @@ from engine.api.schemas.portfolio import (
     TradeNoteCreate,
     TradeRecord,
 )
+from engine.core.attribution import AttributionAnalyzer
+from engine.core.regime_detector import RegimeDetector
 from engine.portfolio.tracker import PortfolioTracker
+from engine.storage.duckdb_store import DuckDBStore
 from engine.storage.sqlite_store import SQLiteStore
 
 router = APIRouter()
@@ -179,3 +192,112 @@ async def get_trade_notes(
 ):
     notes = await store.list_trade_notes(trade_id)
     return [TradeNote(**n) for n in notes]
+
+
+@router.get("/attribution", response_model=AttributionResponse)
+async def portfolio_attribution(
+    signal_type: str = Query("unknown", description="Signal type label for trades"),
+    limit: int = Query(100, ge=1, le=1000, description="Max trades to analyze"),
+    store: SQLiteStore = Depends(get_sqlite_store),
+    duckdb_store: DuckDBStore = Depends(get_duckdb_store),
+):
+    """Run attribution analysis on live/paper trading history."""
+    import pandas as pd
+
+    rows = await store.list_trades(limit=limit, offset=0)
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No trades available for attribution analysis",
+        )
+
+    # Pair buy/sell rows into round-trip trades
+    trades: list[dict] = []
+    pending_buy: dict | None = None
+    for row in rows:
+        side = row["side"]
+        if side == "buy":
+            pending_buy = row
+        elif side == "sell" and pending_buy is not None:
+            price_buy = pending_buy.get("filled_price") or pending_buy["price"]
+            price_sell = row.get("filled_price") or row["price"]
+            qty = pending_buy["quantity"]
+            pnl = row.get("pnl", (price_sell - price_buy) * qty)
+            trades.append({
+                "trade_id": pending_buy["id"],
+                "symbol": pending_buy["symbol"],
+                "side": "buy",
+                "entry_time": pending_buy["created_at"],
+                "exit_time": row["created_at"],
+                "entry_price": price_buy,
+                "exit_price": price_sell,
+                "pnl": pnl,
+                "signal_type": signal_type,
+                "slippage_cost": 0.0,
+                "commission_cost": pending_buy.get("commission", 0.0)
+                + row.get("commission", 0.0),
+            })
+            pending_buy = None
+
+    if not trades:
+        raise HTTPException(
+            status_code=400,
+            detail="No completed round-trip trades found for attribution",
+        )
+
+    # Load market data covering the trade period
+    first_entry = min(t["entry_time"] for t in trades)
+    last_exit = max(t["exit_time"] for t in trades)
+    symbol = trades[0]["symbol"]
+
+    df = duckdb_store.query_bars(
+        symbol=symbol,
+        market="crypto",
+        timeframe="1d",
+        start=str(first_entry),
+        end=str(last_exit),
+    )
+
+    if df.empty:
+        raise HTTPException(
+            status_code=400,
+            detail="No market data available for the trade period",
+        )
+
+    detector = RegimeDetector()
+    analyzer = AttributionAnalyzer(regime_detector=detector)
+
+    attributions = analyzer.analyze_trades(trades, df)
+    raw_summary = analyzer.summarize(attributions)
+
+    items = [
+        TradeAttributionItem(
+            trade_id=a.trade_id,
+            symbol=a.symbol,
+            pnl=a.pnl,
+            signal_type=a.signal_type,
+            market_regime=a.market_regime,
+            entry_timing=a.entry_timing,
+            exit_timing=a.exit_timing,
+            holding_period_hours=a.holding_period_hours,
+            slippage_cost=a.slippage_cost,
+            commission_cost=a.commission_cost,
+        )
+        for a in attributions
+    ]
+
+    summary = AttributionSummary(
+        by_regime={
+            k: RegimeStats(**v) for k, v in raw_summary["by_regime"].items()
+        },
+        by_signal={
+            k: SignalStats(**v) for k, v in raw_summary["by_signal"].items()
+        },
+        timing_quality=TimingQuality(
+            entry=TimingCounts(**raw_summary["timing_quality"]["entry"]),
+            exit=TimingCounts(**raw_summary["timing_quality"]["exit"]),
+        ),
+        cost_analysis=CostAnalysis(**raw_summary["cost_analysis"]),
+    )
+
+    return AttributionResponse(attributions=items, summary=summary)

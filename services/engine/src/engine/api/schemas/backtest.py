@@ -73,3 +73,36 @@ class OptimizeResponse(BaseModel):
     results: list[OptimizeResultItem]
     best_parameters: dict
     total_combinations: int
+
+
+# --------------- Walk-Forward ---------------
+
+
+class WalkForwardRequest(BaseModel):
+    strategy_id: str
+    param_grid: dict[str, list]
+    start_date: datetime
+    end_date: datetime
+    initial_capital: float = 100_000.0
+    market: str = "crypto"
+    symbols: list[str] = ["BTC/USDT"]
+    metric: str = "sharpe_ratio"
+    n_splits: int = 5
+    train_pct: float = 0.7
+
+
+class WalkForwardWindowResponse(BaseModel):
+    train_start: int
+    train_end: int
+    test_start: int
+    test_end: int
+    best_params: dict = {}
+    train_metrics: dict = {}
+    test_metrics: dict = {}
+
+
+class WalkForwardResponse(BaseModel):
+    windows: list[WalkForwardWindowResponse] = []
+    overall_test_metrics: dict = {}
+    overfitting_score: float = 0.0
+    is_overfit: bool = False
