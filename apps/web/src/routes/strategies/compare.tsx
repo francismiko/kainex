@@ -22,6 +22,7 @@ import { Loader2, GitCompareArrows } from 'lucide-react'
 import type { Strategy, BacktestResult, BacktestMetrics } from '@/types/strategy'
 import ReactECharts from 'echarts-for-react'
 import type { EChartsOption } from 'echarts'
+import { useChartHeight } from '@/hooks/use-mobile'
 
 export const Route = createFileRoute('/strategies/compare')({
   component: StrategyCompare,
@@ -43,7 +44,7 @@ interface CompareEntry {
   result: BacktestResult
 }
 
-function CompareChart({ entries }: { entries: CompareEntry[] }) {
+function CompareChart({ entries, height }: { entries: CompareEntry[]; height: number }) {
   const option = useMemo<EChartsOption>(() => {
     // Use the longest equity curve's time axis
     let longestTimes: string[] = []
@@ -93,7 +94,7 @@ function CompareChart({ entries }: { entries: CompareEntry[] }) {
     }
   }, [entries])
 
-  return <ReactECharts option={option} style={{ height: 360 }} />
+  return <ReactECharts option={option} style={{ height }} />
 }
 
 function MetricRow({
@@ -321,24 +322,35 @@ function StrategyCompare() {
       )}
 
       {results.length >= 2 && !running && (
-        <>
-          {/* Equity curve overlay */}
-          <Card>
-            <CardHeader>
-              <CardTitle>收益曲线对比</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CompareChart entries={results} />
-            </CardContent>
-          </Card>
+        <CompareResults results={results} />
+      )}
+    </div>
+  )
+}
 
-          {/* Metrics comparison table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>关键指标对比</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
+function CompareResults({ results }: { results: CompareEntry[] }) {
+  const chartHeight = useChartHeight(360, 260)
+
+  return (
+    <>
+      {/* Equity curve overlay */}
+      <Card>
+        <CardHeader>
+          <CardTitle>收益曲线对比</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CompareChart entries={results} height={chartHeight} />
+        </CardContent>
+      </Card>
+
+      {/* Metrics comparison table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>关键指标对比</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-32">指标</TableHead>
@@ -363,11 +375,10 @@ function StrategyCompare() {
                   <MetricRow label="盈亏比" accessor="profit_factor" entries={results} />
                   <MetricRow label="交易次数" accessor="trade_count" entries={results} format="integer" />
                 </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </>
-      )}
-    </div>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </>
   )
 }

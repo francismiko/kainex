@@ -5,9 +5,11 @@ type ColorScheme = 'international' | 'chinese'
 interface UIState {
   theme: 'dark' | 'light'
   sidebarOpen: boolean
+  mobileSidebarOpen: boolean
   colorScheme: ColorScheme
   toggleTheme: () => void
   toggleSidebar: () => void
+  setMobileSidebarOpen: (open: boolean) => void
   toggleColorScheme: () => void
 }
 
@@ -32,6 +34,7 @@ function applyColorScheme(scheme: ColorScheme, theme: 'dark' | 'light'): void {
 export const useUIStore = create<UIState>((set, get) => ({
   theme: 'dark',
   sidebarOpen: true,
+  mobileSidebarOpen: false,
   colorScheme: 'international',
   toggleTheme: () =>
     set((state) => {
@@ -41,6 +44,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       return { theme: next }
     }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+  setMobileSidebarOpen: (open: boolean) => set({ mobileSidebarOpen: open }),
   toggleColorScheme: () =>
     set((state) => {
       const next: ColorScheme =

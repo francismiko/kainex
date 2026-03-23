@@ -12,6 +12,7 @@ import { PnlChart } from '@/components/charts/pnl-chart.lazy'
 import { DrawdownChart } from '@/components/charts/drawdown-chart.lazy'
 import { MonthlyHeatmap } from '@/components/charts/monthly-heatmap.lazy'
 import { formatPercent, formatNumber, formatCurrency } from '@/lib/format'
+import { useChartHeight } from '@/hooks/use-mobile'
 import type { BacktestResult } from '@/types/strategy'
 
 interface BacktestPanelProps {
@@ -37,6 +38,9 @@ function MetricCard({ label, value, colored }: { label: string; value: string; c
 
 export function BacktestPanel({ result }: BacktestPanelProps) {
   const { equity_curve, trades, metrics } = result
+  const equityHeight = useChartHeight(280, 220)
+  const drawdownHeight = useChartHeight(180, 150)
+  const heatmapHeight = useChartHeight(200, 160)
 
   return (
     <div className="space-y-4">
@@ -57,7 +61,7 @@ export function BacktestPanel({ result }: BacktestPanelProps) {
           <CardTitle className="text-sm">收益曲线</CardTitle>
         </CardHeader>
         <CardContent>
-          <PnlChart data={equity_curve} height={280} />
+          <PnlChart data={equity_curve} height={equityHeight} />
         </CardContent>
       </Card>
 
@@ -67,7 +71,7 @@ export function BacktestPanel({ result }: BacktestPanelProps) {
           <CardTitle className="text-sm">水下回撤</CardTitle>
         </CardHeader>
         <CardContent>
-          <DrawdownChart equityCurve={equity_curve} height={180} />
+          <DrawdownChart equityCurve={equity_curve} height={drawdownHeight} />
         </CardContent>
       </Card>
 
@@ -77,7 +81,7 @@ export function BacktestPanel({ result }: BacktestPanelProps) {
           <CardTitle className="text-sm">月度收益</CardTitle>
         </CardHeader>
         <CardContent>
-          <MonthlyHeatmap equityCurve={equity_curve} height={200} />
+          <MonthlyHeatmap equityCurve={equity_curve} height={heatmapHeight} />
         </CardContent>
       </Card>
 
@@ -87,47 +91,49 @@ export function BacktestPanel({ result }: BacktestPanelProps) {
           <CardTitle className="text-sm">交易记录</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>时间</TableHead>
-                <TableHead>标的</TableHead>
-                <TableHead>方向</TableHead>
-                <TableHead className="text-right">价格</TableHead>
-                <TableHead className="text-right">数量</TableHead>
-                <TableHead className="text-right">盈亏</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {trades.length === 0 ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    暂无交易记录
-                  </TableCell>
+                  <TableHead>时间</TableHead>
+                  <TableHead>标的</TableHead>
+                  <TableHead>方向</TableHead>
+                  <TableHead className="text-right">价格</TableHead>
+                  <TableHead className="text-right">数量</TableHead>
+                  <TableHead className="text-right">盈亏</TableHead>
                 </TableRow>
-              ) : (
-                trades.map((trade) => (
-                  <TableRow key={trade.id}>
-                    <TableCell className="text-muted-foreground">{trade.timestamp}</TableCell>
-                    <TableCell>{trade.symbol}</TableCell>
-                    <TableCell>
-                      <Badge variant={trade.side === 'buy' ? 'default' : 'outline'}>
-                        {trade.side === 'buy' ? '买入' : '卖出'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{formatCurrency(trade.price)}</TableCell>
-                    <TableCell className="text-right">{formatNumber(trade.quantity, 4)}</TableCell>
-                    <TableCell
-                      className="text-right font-medium"
-                      style={{ color: trade.pnl >= 0 ? 'var(--color-profit)' : 'var(--color-loss)' }}
-                    >
-                      {formatCurrency(trade.pnl)}
+              </TableHeader>
+              <TableBody>
+                {trades.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      暂无交易记录
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  trades.map((trade) => (
+                    <TableRow key={trade.id}>
+                      <TableCell className="text-muted-foreground">{trade.timestamp}</TableCell>
+                      <TableCell>{trade.symbol}</TableCell>
+                      <TableCell>
+                        <Badge variant={trade.side === 'buy' ? 'default' : 'outline'}>
+                          {trade.side === 'buy' ? '买入' : '卖出'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{formatCurrency(trade.price)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(trade.quantity, 4)}</TableCell>
+                      <TableCell
+                        className="text-right font-medium"
+                        style={{ color: trade.pnl >= 0 ? 'var(--color-profit)' : 'var(--color-loss)' }}
+                      >
+                        {formatCurrency(trade.pnl)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -26,6 +26,7 @@ import { Watchlist, type WatchlistSymbol } from '@/components/trading/watchlist'
 import { useMarketBars } from '@/hooks/use-api'
 import { useMarketStream, barToCandlestick } from '@/hooks/use-websocket'
 import type { CandlestickData, Time } from 'lightweight-charts'
+import { useChartHeight } from '@/hooks/use-mobile'
 
 export const Route = createFileRoute('/market/')({
   component: Market,
@@ -140,6 +141,7 @@ const PERIOD_OPTIONS = [5, 10, 20, 60] as const
 // --------------- Component ---------------
 
 function Market() {
+  const chartHeight = useChartHeight(500, 300)
   const [symbol, setSymbol] = useState('BTC/USDT')
   const [timeframe, setTimeframe] = useState<Timeframe>('1d')
 
@@ -386,7 +388,7 @@ function Market() {
             <PriceChart
               data={candleData}
               realtimeBar={realtimeCandle}
-              height={500}
+              height={chartHeight}
               indicators={indicators}
             />
           </CardContent>

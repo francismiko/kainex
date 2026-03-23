@@ -1,4 +1,4 @@
-import { Moon, Sun, Search, Wifi, WifiOff } from 'lucide-react'
+import { Moon, Sun, Search, Wifi, WifiOff, Menu } from 'lucide-react'
 import { useRouterState, Link } from '@tanstack/react-router'
 import { useUIStore } from '@/stores/ui-store'
 import { useConnectionStatus } from '@/hooks/use-websocket'
@@ -19,6 +19,7 @@ const routeLabels: Record<string, string> = {
 export function Header() {
   const theme = useUIStore((s) => s.theme)
   const toggleTheme = useUIStore((s) => s.toggleTheme)
+  const setMobileSidebarOpen = useUIStore((s) => s.setMobileSidebarOpen)
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
   const wsStatus = useConnectionStatus()
@@ -28,30 +29,43 @@ export function Header() {
   const segments = pathname === '/' ? ['/'] : pathname.replace(/\/$/, '').split('/').filter(Boolean)
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-6">
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm">
-        <Link to="/" className="text-muted-foreground transition-colors hover:text-foreground">
-          Kainex
-        </Link>
-        {segments.map((seg, i) => {
-          const path = seg === '/' ? '/' : `/${segments.slice(0, i + 1).join('/')}`
-          const label = routeLabels[path] || seg
-          const isLast = i === segments.length - 1
-          return (
-            <span key={path} className="flex items-center gap-1.5">
-              <span className="text-muted-foreground/50">/</span>
-              {isLast ? (
-                <span className="font-medium text-foreground">{label}</span>
-              ) : (
-                <Link to={path} className="text-muted-foreground transition-colors hover:text-foreground">
-                  {label}
-                </Link>
-              )}
-            </span>
-          )
-        })}
-      </nav>
+    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
+      <div className="flex items-center gap-2">
+        {/* Hamburger menu -- mobile only */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="lg:hidden"
+          onClick={() => setMobileSidebarOpen(true)}
+        >
+          <Menu className="h-5 w-5" />
+          <span className="sr-only">打开菜单</span>
+        </Button>
+
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm">
+          <Link to="/" className="text-muted-foreground transition-colors hover:text-foreground">
+            Kainex
+          </Link>
+          {segments.map((seg, i) => {
+            const path = seg === '/' ? '/' : `/${segments.slice(0, i + 1).join('/')}`
+            const label = routeLabels[path] || seg
+            const isLast = i === segments.length - 1
+            return (
+              <span key={path} className="flex items-center gap-1.5">
+                <span className="text-muted-foreground/50">/</span>
+                {isLast ? (
+                  <span className="font-medium text-foreground">{label}</span>
+                ) : (
+                  <Link to={path} className="text-muted-foreground transition-colors hover:text-foreground">
+                    {label}
+                  </Link>
+                )}
+              </span>
+            )
+          })}
+        </nav>
+      </div>
 
       {/* Right actions */}
       <div className="flex items-center gap-2">
@@ -74,18 +88,18 @@ export function Header() {
           </TooltipContent>
         </Tooltip>
 
-        <Separator orientation="vertical" className="h-5" />
+        <Separator orientation="vertical" className="hidden sm:block h-5" />
 
         {/* Search trigger */}
-        <Button variant="outline" size="sm" className="gap-2 text-muted-foreground" onClick={() => {}}>
+        <Button variant="outline" size="sm" className="hidden sm:flex gap-2 text-muted-foreground" onClick={() => {}}>
           <Search className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">搜索</span>
           <kbd className="pointer-events-none hidden h-5 select-none items-center gap-0.5 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium sm:inline-flex">
-            <span className="text-xs">\u2318</span>K
+            <span className="text-xs">{'\u2318'}K</span>
           </kbd>
         </Button>
 
-        <Separator orientation="vertical" className="h-5" />
+        <Separator orientation="vertical" className="hidden sm:block h-5" />
 
         {/* Theme toggle */}
         <Button variant="ghost" size="icon" onClick={toggleTheme}>

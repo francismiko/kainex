@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { DollarSign, TrendingUp, Bot, AlertTriangle, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { formatCurrency, formatPercent, formatPnl } from '@/lib/format'
+import { useChartHeight } from '@/hooks/use-mobile'
 
 export const Route = createFileRoute('/')({
   component: Dashboard,
@@ -71,12 +72,15 @@ const mockSignals = [
 ]
 
 function Dashboard() {
+  const pnlChartHeight = useChartHeight(350, 250)
+  const allocationChartHeight = useChartHeight(300, 250)
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">{'\u603b\u89c8'}</h1>
 
-      {/* Stats cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Stats cards -- 2 cols on mobile, 4 on desktop */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -86,7 +90,7 @@ function Dashboard() {
               <stat.icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
+              <div className="text-xl font-bold sm:text-2xl">{stat.value}</div>
               <p
                 className={`text-xs ${stat.positive ? 'text-profit' : 'text-yellow-500'}`}
               >
@@ -97,54 +101,57 @@ function Dashboard() {
         ))}
       </div>
 
-      {/* Strategy status panel */}
+      {/* Strategy status panel -- horizontal scroll on mobile, hide non-critical columns */}
       <Card>
         <CardHeader>
           <CardTitle>{'\u7b56\u7565\u5b9e\u65f6\u72b6\u6001'}</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{'\u7b56\u7565'}</TableHead>
-                <TableHead>{'\u72b6\u6001'}</TableHead>
-                <TableHead className="text-right">{'\u6536\u76ca'}</TableHead>
-                <TableHead>{'\u6700\u8fd1\u4fe1\u53f7'}</TableHead>
-                <TableHead className="text-right">{'\u65f6\u95f4'}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockStrategies.map((s) => {
-                const pnl = formatPnl(s.pnlValue)
-                return (
-                  <TableRow key={s.name}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          s.status === 'running'
-                            ? 'default'
-                            : s.status === 'backtest'
-                              ? 'secondary'
-                              : 'outline'
-                        }
-                      >
-                        {s.status === 'running' ? '\u8fd0\u884c\u4e2d' : s.status === 'backtest' ? '\u56de\u6d4b\u4e2d' : '\u5df2\u505c\u6b62'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className={`text-right font-mono ${s.pnlValue === 0 ? 'text-muted-foreground' : pnl.className}`}>
-                      {s.pnlValue === 0 ? s.pnl : `${pnl.text} (${s.pnl})`}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{s.lastSignal}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{s.signalTime}</TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{'\u7b56\u7565'}</TableHead>
+                  <TableHead>{'\u72b6\u6001'}</TableHead>
+                  <TableHead className="text-right">{'\u6536\u76ca'}</TableHead>
+                  <TableHead className="hidden sm:table-cell">{'\u6700\u8fd1\u4fe1\u53f7'}</TableHead>
+                  <TableHead className="hidden sm:table-cell text-right">{'\u65f6\u95f4'}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {mockStrategies.map((s) => {
+                  const pnl = formatPnl(s.pnlValue)
+                  return (
+                    <TableRow key={s.name}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            s.status === 'running'
+                              ? 'default'
+                              : s.status === 'backtest'
+                                ? 'secondary'
+                                : 'outline'
+                          }
+                        >
+                          {s.status === 'running' ? '\u8fd0\u884c\u4e2d' : s.status === 'backtest' ? '\u56de\u6d4b\u4e2d' : '\u5df2\u505c\u6b62'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className={`text-right font-mono ${s.pnlValue === 0 ? 'text-muted-foreground' : pnl.className}`}>
+                        {s.pnlValue === 0 ? s.pnl : `${pnl.text} (${s.pnl})`}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-muted-foreground">{s.lastSignal}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-right text-muted-foreground">{s.signalTime}</TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
+      {/* Positions + Allocation: 2 cols on desktop, stacked on mobile */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Top 5 positions */}
         <Card>
@@ -152,39 +159,41 @@ function Dashboard() {
             <CardTitle>{'\u6301\u4ed3 Top 5'}</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{'\u6807\u7684'}</TableHead>
-                  <TableHead>{'\u65b9\u5411'}</TableHead>
-                  <TableHead className="text-right">{'\u73b0\u4ef7'}</TableHead>
-                  <TableHead className="text-right">{'\u6d6e\u76c8'}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockPositions.map((p) => {
-                  const pnl = formatPnl(p.pnlValue)
-                  return (
-                    <TableRow key={p.symbol}>
-                      <TableCell>
-                        <div className="font-medium">{p.symbol}</div>
-                        <div className="text-xs text-muted-foreground">{p.market}</div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={p.side === '\u591a' ? 'default' : 'destructive'} className="text-xs">
-                          {p.side}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{formatCurrency(p.currentPrice)}</TableCell>
-                      <TableCell className={`text-right font-mono ${pnl.className}`}>
-                        <div>{pnl.text}</div>
-                        <div className="text-xs">{formatPercent(p.pnlPct)}</div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{'\u6807\u7684'}</TableHead>
+                    <TableHead>{'\u65b9\u5411'}</TableHead>
+                    <TableHead className="text-right">{'\u73b0\u4ef7'}</TableHead>
+                    <TableHead className="text-right">{'\u6d6e\u76c8'}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {mockPositions.map((p) => {
+                    const pnl = formatPnl(p.pnlValue)
+                    return (
+                      <TableRow key={p.symbol}>
+                        <TableCell>
+                          <div className="font-medium">{p.symbol}</div>
+                          <div className="text-xs text-muted-foreground">{p.market}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={p.side === '\u591a' ? 'default' : 'destructive'} className="text-xs">
+                            {p.side}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">{formatCurrency(p.currentPrice)}</TableCell>
+                        <TableCell className={`text-right font-mono ${pnl.className}`}>
+                          <div>{pnl.text}</div>
+                          <div className="text-xs">{formatPercent(p.pnlPct)}</div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
 
@@ -194,7 +203,7 @@ function Dashboard() {
             <CardTitle>{'\u8d44\u4ea7\u5206\u5e03'}</CardTitle>
           </CardHeader>
           <CardContent>
-            <AllocationChart data={mockAllocationData} height={300} />
+            <AllocationChart data={mockAllocationData} height={allocationChartHeight} />
           </CardContent>
         </Card>
       </div>
@@ -239,7 +248,7 @@ function Dashboard() {
           <CardTitle>{'\u6536\u76ca\u66f2\u7ebf'}</CardTitle>
         </CardHeader>
         <CardContent>
-          <PnlChart data={mockPnlData} benchmark={mockBenchmarkData} height={350} />
+          <PnlChart data={mockPnlData} benchmark={mockBenchmarkData} height={pnlChartHeight} />
         </CardContent>
       </Card>
     </div>

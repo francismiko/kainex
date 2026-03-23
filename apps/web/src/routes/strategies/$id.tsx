@@ -385,6 +385,7 @@ function StrategyDetail() {
               暂无历史回测记录
             </p>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -415,6 +416,7 @@ function StrategyDetail() {
                 })}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

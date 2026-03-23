@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useChartHeight } from '@/hooks/use-mobile'
 
 export const Route = createFileRoute('/portfolio/')({
   component: Portfolio,
@@ -48,6 +49,7 @@ function apiPositionsToDisplay(positions: { symbol: string; side: string; quanti
 }
 
 function Portfolio() {
+  const pnlChartHeight = useChartHeight(350, 250)
   const summaryQuery = usePortfolioSummary()
   const positionsQuery = usePositions()
 
@@ -73,7 +75,7 @@ function Portfolio() {
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">总资产</CardTitle>
@@ -121,7 +123,7 @@ function Portfolio() {
           <CardTitle>累计收益</CardTitle>
         </CardHeader>
         <CardContent>
-          <PnlChart data={mockPnlData} height={350} />
+          <PnlChart data={mockPnlData} height={pnlChartHeight} />
         </CardContent>
       </Card>
 
@@ -130,39 +132,41 @@ function Portfolio() {
           <CardTitle>当前持仓</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>标的</TableHead>
-                <TableHead>市场</TableHead>
-                <TableHead>方向</TableHead>
-                <TableHead className="text-right">数量</TableHead>
-                <TableHead className="text-right">均价</TableHead>
-                <TableHead className="text-right">现价</TableHead>
-                <TableHead className="text-right">浮盈</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {positions.map((p) => (
-                <TableRow key={p.symbol}>
-                  <TableCell className="font-medium">{p.symbol}</TableCell>
-                  <TableCell className="text-muted-foreground">{p.market}</TableCell>
-                  <TableCell>
-                    <Badge variant={p.side === '多' ? 'default' : 'destructive'} className="text-xs">
-                      {p.side}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono">{p.qty}</TableCell>
-                  <TableCell className="text-right font-mono">{p.avgPrice}</TableCell>
-                  <TableCell className="text-right font-mono">{p.currentPrice}</TableCell>
-                  <TableCell className={`text-right font-mono font-medium ${p.unrealizedPnl >= 0 ? 'text-profit' : 'text-loss'}`}>
-                    <div>{p.unrealizedPnl >= 0 ? '+' : ''}{p.unrealizedPnl.toLocaleString()}</div>
-                    <div className="text-xs">{p.unrealizedPct >= 0 ? '+' : ''}{p.unrealizedPct.toFixed(2)}%</div>
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>标的</TableHead>
+                  <TableHead>市场</TableHead>
+                  <TableHead>方向</TableHead>
+                  <TableHead className="text-right">数量</TableHead>
+                  <TableHead className="text-right">均价</TableHead>
+                  <TableHead className="text-right">现价</TableHead>
+                  <TableHead className="text-right">浮盈</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {positions.map((p) => (
+                  <TableRow key={p.symbol}>
+                    <TableCell className="font-medium">{p.symbol}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.market}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.side === '多' ? 'default' : 'destructive'} className="text-xs">
+                        {p.side}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{p.qty}</TableCell>
+                    <TableCell className="text-right font-mono">{p.avgPrice}</TableCell>
+                    <TableCell className="text-right font-mono">{p.currentPrice}</TableCell>
+                    <TableCell className={`text-right font-mono font-medium ${p.unrealizedPnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                      <div>{p.unrealizedPnl >= 0 ? '+' : ''}{p.unrealizedPnl.toLocaleString()}</div>
+                      <div className="text-xs">{p.unrealizedPct >= 0 ? '+' : ''}{p.unrealizedPct.toFixed(2)}%</div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
