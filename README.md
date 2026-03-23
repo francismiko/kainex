@@ -1,5 +1,10 @@
 # Kainex
 
+![License](https://img.shields.io/github/license/francismiko/kainex)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![React](https://img.shields.io/badge/React-19-blue)
+![Tests](https://img.shields.io/badge/Tests-133%20passing-green)
+
 > The edge you engineer. -- Open-source multi-market quantitative trading platform.
 
 Kainex is an open-source quantitative trading platform supporting A-shares, crypto, and US stocks with strategy backtesting, paper trading, and real-time monitoring.
