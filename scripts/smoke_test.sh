@@ -95,7 +95,7 @@ fi
 log "Testing strategy endpoints..."
 
 # POST /api/strategies — create an SMA strategy
-CREATE_RESP=$(curl -sf -X POST "$BASE_URL/api/strategies" \
+CREATE_RESP=$(curl -sf -X POST "$BASE_URL/api/strategies/" \
     -H "Content-Type: application/json" \
     -d '{
         "name": "Smoke Test SMA",
@@ -114,7 +114,7 @@ else
 fi
 
 # GET /api/strategies — list strategies
-LIST_RESP=$(curl -sf "$BASE_URL/api/strategies" 2>&1) || true
+LIST_RESP=$(curl -sf "$BASE_URL/api/strategies/" 2>&1) || true
 if echo "$LIST_RESP" | jq -e 'type == "array"' >/dev/null 2>&1; then
     COUNT=$(echo "$LIST_RESP" | jq 'length')
     if [ "$COUNT" -ge 1 ]; then
