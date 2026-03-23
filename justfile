@@ -78,6 +78,20 @@ py-test:
 seed:
   cd services/collector && uv run python scripts/seed_data.py
 
+# ─── Service ────────────────────────────────────────────────────
+
+# Install collector as launchd service (auto-start on login)
+install-service:
+  bash scripts/install-launchd.sh
+
+# Uninstall collector launchd service
+uninstall-service:
+  bash scripts/uninstall-launchd.sh
+
+# Check collector service status
+service-status:
+  launchctl list | grep kainex || echo "Not installed"
+
 # ─── Setup ─────────────────────────────────────────────────────
 
 # First-time project setup
