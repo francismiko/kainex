@@ -120,8 +120,14 @@ export const api = {
       })
       return mapBacktestResult(raw)
     },
-    results: () => apiFetch<unknown[]>('/api/backtest/results'),
-    result: (id: string) => apiFetch<unknown>(`/api/backtest/results/${id}`),
+    results: async () => {
+      const raw = await apiFetch<unknown[]>('/api/backtest/results')
+      return raw.map(mapBacktestResult)
+    },
+    result: async (id: string) => {
+      const raw = await apiFetch<unknown>(`/api/backtest/results/${id}`)
+      return mapBacktestResult(raw)
+    },
   },
   portfolio: {
     summary: () => apiFetch<Portfolio>('/api/portfolio/summary'),

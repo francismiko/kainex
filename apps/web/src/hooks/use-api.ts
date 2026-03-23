@@ -97,3 +97,18 @@ export function useRunBacktest() {
     }) => api.backtest.run(params) as Promise<BacktestResult>,
   })
 }
+
+export function useBacktestResults() {
+  return useQuery({
+    queryKey: ['backtest', 'results'],
+    queryFn: api.backtest.results,
+  })
+}
+
+export function useBacktestResult(id: string) {
+  return useQuery({
+    queryKey: ['backtest', 'results', id],
+    queryFn: () => api.backtest.result(id),
+    enabled: !!id,
+  })
+}

@@ -2,6 +2,14 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { EmptyState } from '@/components/shared/empty-state'
 import {
@@ -10,6 +18,7 @@ import {
   useStopStrategy,
   useDeleteStrategy,
   useRunBacktest,
+  useBacktestResults,
 } from '@/hooks/use-api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,7 +33,8 @@ import {
 } from '@/components/ui/dialog'
 import { BacktestPanel } from '@/components/strategy/backtest-panel'
 import { toast } from 'sonner'
-import { AlertTriangle, Loader2, Play, Square, Trash2 } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, History, Loader2, Play, Square, Trash2 } from 'lucide-react'
+import { formatPercent, formatNumber, formatDateTime } from '@/lib/format'
 import type { BacktestResult } from '@/types/strategy'
 
 export const Route = createFileRoute('/strategies/$id')({
@@ -54,6 +64,7 @@ function StrategyDetail() {
   const stopMutation = useStopStrategy()
   const deleteMutation = useDeleteStrategy()
   const backtestMutation = useRunBacktest()
+  const { data: allBacktestResults } = useBacktestResults()
 
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null)
   const [backtestDialogOpen, setBacktestDialogOpen] = useState(false)
@@ -62,6 +73,12 @@ function StrategyDetail() {
   const [endDate, setEndDate] = useState('2026-01-01')
   const [initialCapital, setInitialCapital] = useState('100000')
   const [backtestEmpty, setBacktestEmpty] = useState(false)
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+
+  // Filter backtest history for current strategy
+  const backtestHistory = (allBacktestResults ?? []).filter(
+    (r) => r.strategy_id === id,
+  )
 
   function handleRunBacktest() {
     setBacktestEmpty(false)
@@ -355,6 +372,125 @@ function StrategyDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Backtest history */}
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-2">
+          <History className="size-5 text-muted-foreground" />
+          <CardTitle>历史回测记录</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {backtestHistory.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-8">
+              暂无历史回测记录
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead>时间</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead className="text-right">夏普比率</TableHead>
+                  <TableHead className="text-right">总收益</TableHead>
+                  <TableHead className="text-right">最大回撤</TableHead>
+                  <TableHead className="text-right">胜率</TableHead>
+                  <TableHead className="text-right">交易次数</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {backtestHistory.map((record) => {
+                  const rid = record.id ?? record.strategy_id ?? ''
+                  const isExpanded = expandedHistoryId === rid
+                  return (
+                    <HistoryRow
+                      key={rid}
+                      record={record}
+                      isExpanded={isExpanded}
+                      onToggle={() =>
+                        setExpandedHistoryId(isExpanded ? null : rid)
+                      }
+                    />
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
+  )
+}
+
+function HistoryRow({
+  record,
+  isExpanded,
+  onToggle,
+}: {
+  record: BacktestResult
+  isExpanded: boolean
+  onToggle: () => void
+}) {
+  const { metrics } = record
+  const hasEquity = record.equity_curve && record.equity_curve.length > 0
+  const firstTime = hasEquity ? record.equity_curve[0].time : '-'
+
+  return (
+    <>
+      <TableRow
+        className="cursor-pointer hover:bg-muted/50"
+        onClick={onToggle}
+      >
+        <TableCell>
+          {isExpanded ? (
+            <ChevronDown className="size-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="size-4 text-muted-foreground" />
+          )}
+        </TableCell>
+        <TableCell className="text-muted-foreground">
+          {firstTime !== '-' ? formatDateTime(firstTime) : '-'}
+        </TableCell>
+        <TableCell>
+          <Badge variant={record.status === 'completed' ? 'default' : 'outline'}>
+            {record.status ?? '完成'}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-right font-mono">
+          {formatNumber(metrics.sharpe)}
+        </TableCell>
+        <TableCell
+          className="text-right font-mono"
+          style={{
+            color: metrics.total_return >= 0
+              ? 'var(--color-profit)'
+              : 'var(--color-loss)',
+          }}
+        >
+          {formatPercent(metrics.total_return)}
+        </TableCell>
+        <TableCell
+          className="text-right font-mono"
+          style={{ color: 'var(--color-loss)' }}
+        >
+          {formatPercent(metrics.max_drawdown)}
+        </TableCell>
+        <TableCell className="text-right font-mono">
+          {formatPercent(metrics.win_rate)}
+        </TableCell>
+        <TableCell className="text-right font-mono">
+          {metrics.trade_count}
+        </TableCell>
+      </TableRow>
+      {isExpanded && hasEquity && (
+        <TableRow>
+          <TableCell colSpan={8} className="p-0">
+            <div className="p-4 bg-muted/20">
+              <BacktestPanel result={record} />
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   )
 }

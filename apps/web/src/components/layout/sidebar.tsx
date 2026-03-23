@@ -2,6 +2,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import {
   LayoutDashboard,
   Bot,
+  GitCompareArrows,
   LineChart,
   ArrowRightLeft,
   Briefcase,
@@ -13,14 +14,28 @@ import { useUIStore } from '@/stores/ui-store'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-const navItems = [
+interface NavItem {
+  to: string
+  label: string
+  icon: typeof LayoutDashboard
+  children?: { to: string; label: string; icon: typeof LayoutDashboard }[]
+}
+
+const navItems: NavItem[] = [
   { to: '/', label: '总览', icon: LayoutDashboard },
-  { to: '/strategies', label: '策略管理', icon: Bot },
+  {
+    to: '/strategies',
+    label: '策略管理',
+    icon: Bot,
+    children: [
+      { to: '/strategies/compare', label: '策略对比', icon: GitCompareArrows },
+    ],
+  },
   { to: '/market', label: '行情中心', icon: LineChart },
   { to: '/trades', label: '交易记录', icon: ArrowRightLeft },
   { to: '/portfolio', label: '持仓组合', icon: Briefcase },
   { to: '/risk', label: '风控监控', icon: ShieldAlert },
-] as const
+]
 
 export function Sidebar() {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen)
@@ -55,7 +70,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 p-2">
-        {navItems.map(({ to, label, icon: Icon }) => {
+        {navItems.map(({ to, label, icon: Icon, children }) => {
           const isActive =
             to === '/' ? currentPath === '/' : currentPath.startsWith(to)
 
@@ -76,6 +91,28 @@ export function Sidebar() {
             </Link>
           )
 
+          const childLinks =
+            children && sidebarOpen && isActive
+              ? children.map((child) => {
+                  const childActive = currentPath.startsWith(child.to)
+                  return (
+                    <Link
+                      key={child.to}
+                      to={child.to}
+                      className={cn(
+                        'flex items-center gap-3 rounded-md px-3 py-1.5 pl-10 text-sm transition-colors',
+                        childActive
+                          ? 'text-sidebar-primary font-medium'
+                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent',
+                      )}
+                    >
+                      <child.icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{child.label}</span>
+                    </Link>
+                  )
+                })
+              : null
+
           if (!sidebarOpen) {
             return (
               <Tooltip key={to}>
@@ -89,7 +126,12 @@ export function Sidebar() {
             )
           }
 
-          return linkContent
+          return (
+            <div key={to}>
+              {linkContent}
+              {childLinks}
+            </div>
+          )
         })}
       </nav>
 
