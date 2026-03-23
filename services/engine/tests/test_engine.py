@@ -974,3 +974,89 @@ class TestMLPredictor:
         result = pred.predict_proba(pd.DataFrame({"a": [1, 2, 3]}))
         assert result.shape == (3, 3)
         np.testing.assert_allclose(result, 1 / 3)
+
+
+# --------------- PortfolioTracker ---------------
+
+
+class TestPortfolioTracker:
+    def test_initial_state(self):
+        from engine.portfolio.tracker import PortfolioTracker
+
+        tracker = PortfolioTracker(initial_cash=50_000.0)
+        assert tracker.cash == 50_000.0
+        assert tracker.total_value == 50_000.0
+        assert tracker.positions == {}
+
+    def test_update_position_and_price(self):
+        from engine.portfolio.tracker import PortfolioTracker
+
+        tracker = PortfolioTracker(initial_cash=100_000.0)
+        tracker.update_position("BTC/USDT", 2.0)
+        tracker.update_price("BTC/USDT", 50_000.0)
+        assert tracker.total_value == 100_000.0 + 2.0 * 50_000.0
+
+    def test_remove_position(self):
+        from engine.portfolio.tracker import PortfolioTracker
+
+        tracker = PortfolioTracker()
+        tracker.update_position("ETH", 10.0)
+        assert "ETH" in tracker.positions
+        tracker.update_position("ETH", 0)
+        assert "ETH" not in tracker.positions
+
+    def test_snapshot(self):
+        from engine.portfolio.tracker import PortfolioTracker
+
+        tracker = PortfolioTracker(initial_cash=10_000.0)
+        tracker.update_position("AAPL", 5.0)
+        tracker.update_price("AAPL", 200.0)
+        snap = tracker.snapshot()
+        assert snap.cash == 10_000.0
+        assert snap.total_value == 10_000.0 + 5 * 200.0
+        assert "AAPL" in snap.positions
+        assert len(tracker.history) == 1
+
+
+# --------------- Ledger ---------------
+
+
+class TestLedger:
+    def test_record_trade(self):
+        from engine.portfolio.ledger import Ledger, TradeType
+
+        ledger = Ledger()
+        rec = ledger.record("BTC/USDT", TradeType.BUY, 1.0, 60000.0, 30.0)
+        assert rec.id == "TXN-00000001"
+        assert rec.symbol == "BTC/USDT"
+        assert rec.quantity == 1.0
+        assert len(ledger.records) == 1
+
+    def test_multiple_records(self):
+        from engine.portfolio.ledger import Ledger, TradeType
+
+        ledger = Ledger()
+        ledger.record("BTC", TradeType.BUY, 1.0, 60000.0, 30.0, pnl=0)
+        ledger.record("BTC", TradeType.SELL, 1.0, 62000.0, 31.0, pnl=2000.0)
+        ledger.record("ETH", TradeType.BUY, 10.0, 3000.0, 15.0)
+        assert len(ledger.records) == 3
+        assert len(ledger.by_symbol("BTC")) == 2
+        assert len(ledger.by_symbol("ETH")) == 1
+
+    def test_total_commission_and_pnl(self):
+        from engine.portfolio.ledger import Ledger, TradeType
+
+        ledger = Ledger()
+        ledger.record("A", TradeType.BUY, 100, 10.0, 5.0, pnl=0)
+        ledger.record("A", TradeType.SELL, 100, 12.0, 5.0, pnl=200.0)
+        assert ledger.total_commission == 10.0
+        assert ledger.total_pnl == 200.0
+
+    def test_records_returns_copy(self):
+        from engine.portfolio.ledger import Ledger, TradeType
+
+        ledger = Ledger()
+        ledger.record("X", TradeType.BUY, 1, 1, 0)
+        records = ledger.records
+        records.clear()
+        assert len(ledger.records) == 1  # original not affected
