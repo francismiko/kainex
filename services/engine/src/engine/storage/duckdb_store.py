@@ -8,7 +8,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "kainex_analytics.duckdb"
+_DEFAULT_DB_PATH = Path(__file__).resolve().parents[5] / "data" / "kainex.duckdb"
 
 
 class DuckDBStore:
@@ -23,16 +23,16 @@ class DuckDBStore:
     def _init_tables(self) -> None:
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS bars (
-                symbol VARCHAR NOT NULL,
-                market VARCHAR NOT NULL,
+                symbol    VARCHAR NOT NULL,
+                market    VARCHAR NOT NULL,
                 timeframe VARCHAR NOT NULL,
-                ts TIMESTAMP NOT NULL,
-                open DOUBLE,
-                high DOUBLE,
-                low DOUBLE,
-                close DOUBLE,
-                volume DOUBLE,
-                PRIMARY KEY (symbol, market, timeframe, ts)
+                open      DOUBLE NOT NULL,
+                high      DOUBLE NOT NULL,
+                low       DOUBLE NOT NULL,
+                close     DOUBLE NOT NULL,
+                volume    DOUBLE NOT NULL,
+                ts        TIMESTAMP NOT NULL,
+                UNIQUE(symbol, market, timeframe, ts)
             )
         """)
 

@@ -78,10 +78,15 @@ class NautilusBacktestEngine:
     ) -> BacktestResult:
         """Run a backtest using NautilusTrader engine."""
         df = data.copy()
+        # Normalize timezone: strip tz from both sides to avoid comparison errors
+        if hasattr(df.index, 'tz') and df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
         if start:
-            df = df[df.index >= pd.Timestamp(start)]
+            ts_start = pd.Timestamp(start).tz_localize(None) if pd.Timestamp(start).tzinfo else pd.Timestamp(start)
+            df = df[df.index >= ts_start]
         if end:
-            df = df[df.index <= pd.Timestamp(end)]
+            ts_end = pd.Timestamp(end).tz_localize(None) if pd.Timestamp(end).tzinfo else pd.Timestamp(end)
+            df = df[df.index <= ts_end]
 
         if df.empty:
             return BacktestResult(

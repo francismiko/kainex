@@ -51,6 +51,10 @@ py-test:
   cd services/collector && uv run pytest
   cd services/engine && uv run pytest
 
+# Seed sample data for development
+seed:
+  cd services/collector && uv run python scripts/seed_data.py
+
 # ─── Setup ─────────────────────────────────────────────────────
 
 # First-time project setup

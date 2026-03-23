@@ -1,9 +1,22 @@
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
-import { useStrategy, useStartStrategy, useStopStrategy } from '@/hooks/use-api'
+import { useStrategy, useStartStrategy, useStopStrategy, useRunBacktest } from '@/hooks/use-api'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { BacktestPanel } from '@/components/strategy/backtest-panel'
+import type { BacktestResult } from '@/types/strategy'
 
 export const Route = createFileRoute('/strategies/$id')({
   component: StrategyDetail,
@@ -14,6 +27,30 @@ function StrategyDetail() {
   const { data: strategy, isLoading, isError } = useStrategy(id)
   const startMutation = useStartStrategy()
   const stopMutation = useStopStrategy()
+  const backtestMutation = useRunBacktest()
+
+  const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [startDate, setStartDate] = useState('2025-01-01')
+  const [endDate, setEndDate] = useState('2026-01-01')
+  const [initialCapital, setInitialCapital] = useState('100000')
+
+  function handleRunBacktest() {
+    backtestMutation.mutate(
+      {
+        strategy_id: id,
+        start_date: startDate,
+        end_date: endDate,
+        initial_capital: Number(initialCapital),
+      },
+      {
+        onSuccess: (data) => {
+          setBacktestResult(data)
+          setDialogOpen(false)
+        },
+      },
+    )
+  }
 
   if (isLoading) return <LoadingSkeleton />
 
@@ -106,11 +143,67 @@ function StrategyDetail() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>回测结果</CardTitle>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">运行回测</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>回测参数</DialogTitle>
+                <DialogDescription>设置回测时间范围和初始资金</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">开始日期</label>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">结束日期</label>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">初始资金</label>
+                  <Input
+                    type="number"
+                    value={initialCapital}
+                    onChange={(e) => setInitialCapital(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={handleRunBacktest}
+                  disabled={backtestMutation.isPending}
+                >
+                  {backtestMutation.isPending ? '回测中...' : '开始回测'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">选择时间范围后运行回测，结果将在此展示</p>
+          {backtestMutation.isPending && (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin h-8 w-8 rounded-full border-2 border-primary border-t-transparent" />
+              <span className="ml-3 text-sm text-muted-foreground">回测运行中...</span>
+            </div>
+          )}
+          {backtestResult && !backtestMutation.isPending && (
+            <BacktestPanel result={backtestResult} />
+          )}
+          {!backtestResult && !backtestMutation.isPending && (
+            <p className="text-sm text-muted-foreground">点击"运行回测"设置参数后查看结果</p>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -417,6 +417,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "exchange-calendars" },
     { name = "finnhub-python" },
+    { name = "kainex-shared" },
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -439,6 +440,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "exchange-calendars" },
     { name = "finnhub-python" },
+    { name = "kainex-shared", editable = "../../packages/shared" },
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -756,6 +758,17 @@ name = "jsonpath"
 version = "0.82.2"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/cf/a1/693351acd0a9edca4de9153372a65e75398898ea7f8a5c722ab00f464929/jsonpath-0.82.2.tar.gz", hash = "sha256:d87ef2bcbcded68ee96bc34c1809b69457ecec9b0c4dd471658a12bd391002d1", size = 10353, upload-time = "2023-08-24T18:57:55.459Z" }
+
+[[package]]
+name = "kainex-shared"
+version = "0.1.0"
+source = { editable = "../../packages/shared" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2" }]
 
 [[package]]
 name = "korean-lunar-calendar"

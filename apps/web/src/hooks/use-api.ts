@@ -4,6 +4,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
+import type { BacktestResult } from '@/types/strategy'
 
 export function useStrategies() {
   return useQuery({
@@ -65,5 +66,16 @@ export function useMarketBars(params: {
   return useQuery({
     queryKey: ['market', 'bars', params],
     queryFn: () => api.market.bars(params),
+  })
+}
+
+export function useRunBacktest() {
+  return useMutation({
+    mutationFn: (params: {
+      strategy_id: string
+      start_date: string
+      end_date: string
+      initial_capital: number
+    }) => api.backtest.run(params) as Promise<BacktestResult>,
   })
 }

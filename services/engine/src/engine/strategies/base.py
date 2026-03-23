@@ -1,46 +1,11 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from enum import Enum
 
 import pandas as pd
-from nautilus_trader.model.identifiers import InstrumentId
-from nautilus_trader.trading.strategy import Strategy
+from kainex_shared import Market, Signal, SignalType, TimeFrame
 from nautilus_trader.config import StrategyConfig
 from nautilus_trader.model.data import Bar
-
-
-class TimeFrame(str, Enum):
-    TICK = "tick"
-    M1 = "1m"
-    M5 = "5m"
-    M15 = "15m"
-    H1 = "1h"
-    H4 = "4h"
-    D1 = "1d"
-    W1 = "1w"
-
-
-class Market(str, Enum):
-    A_STOCK = "a_stock"
-    CRYPTO = "crypto"
-    US_STOCK = "us_stock"
-
-
-class SignalType(str, Enum):
-    BUY = "buy"
-    SELL = "sell"
-    HOLD = "hold"
-
-
-@dataclass(frozen=True)
-class Signal:
-    symbol: str
-    signal_type: SignalType
-    price: float
-    quantity: float
-    stop_loss: float | None = None
-    take_profit: float | None = None
-    metadata: dict | None = field(default=None, hash=False)
+from nautilus_trader.model.identifiers import InstrumentId
+from nautilus_trader.trading.strategy import Strategy
 
 
 class AbstractStrategy(ABC):

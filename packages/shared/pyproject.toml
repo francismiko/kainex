@@ -1,0 +1,13 @@
+[project]
+name = "kainex-shared"
+version = "0.1.0"
+description = "Shared data models for Kainex services"
+authors = [
+    { name = "francismiko", email = "1485059943@qq.com" }
+]
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

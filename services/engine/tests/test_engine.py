@@ -641,8 +641,8 @@ class TestDuckDBStore:
         store = DuckDBStore(db_path=tmp_path / "test.duckdb")
         # Insert some data
         store.execute("""
-            INSERT INTO bars VALUES
-            ('BTC/USDT', 'crypto', '1d', '2024-01-01', 42000, 43000, 41000, 42500, 1000)
+            INSERT INTO bars (symbol, market, timeframe, open, high, low, close, volume, ts) VALUES
+            ('BTC/USDT', 'crypto', '1d', 42000, 43000, 41000, 42500, 1000, '2024-01-01')
         """)
         out_path = tmp_path / "export.parquet"
         store.export_parquet("SELECT * FROM bars", out_path)
