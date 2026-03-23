@@ -19,12 +19,14 @@ def set_writer(writer: DuckDBWriter) -> None:
 
 
 def _get_writer() -> DuckDBWriter:
-    assert _writer is not None, "DuckDBWriter not initialized — call set_writer() first"
+    if _writer is None:
+        raise RuntimeError("DuckDBWriter not initialized — call set_writer() first")
     return _writer
 
 
 def _aggregate(writer: DuckDBWriter) -> None:
-    assert writer._conn is not None
+    if writer._conn is None:
+        raise RuntimeError("DuckDBWriter not connected — call connect() first")
     writer._conn.execute(
         """
         INSERT OR REPLACE INTO bars (symbol, market, timeframe, open, high, low, close, volume, ts)

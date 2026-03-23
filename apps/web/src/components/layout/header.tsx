@@ -13,6 +13,7 @@ const routeLabels: Record<string, string> = {
   '/trades': '交易记录',
   '/portfolio': '持仓组合',
   '/risk': '风控监控',
+  '/settings': '设置',
 }
 
 export function Header() {

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date
 from typing import TYPE_CHECKING
+
+import exchange_calendars as xcals
 
 from collector.config import settings
 from collector.models.bar import TimeFrame
@@ -12,6 +15,8 @@ if TYPE_CHECKING:
     from collector.storage.duckdb_writer import DuckDBWriter
 
 logger = logging.getLogger(__name__)
+
+_xshg_calendar = xcals.get_calendar("XSHG")
 
 # Global writer — set by main.py at startup
 _writer: DuckDBWriter | None = None
@@ -23,7 +28,8 @@ def set_writer(writer: DuckDBWriter) -> None:
 
 
 def _get_writer() -> DuckDBWriter:
-    assert _writer is not None, "DuckDBWriter not initialized — call set_writer() first"
+    if _writer is None:
+        raise RuntimeError("DuckDBWriter not initialized — call set_writer() first")
     return _writer
 
 
@@ -74,6 +80,11 @@ def build_crypto_manager() -> DataSourceManager:
 
 
 async def collect_astock_intraday() -> None:
+    today = date.today()
+    if not _xshg_calendar.is_session(today):
+        logger.info("Skipping A-stock collection: %s is not a XSHG trading day", today)
+        return
+
     manager = build_astock_manager()
     writer = _get_writer()
 

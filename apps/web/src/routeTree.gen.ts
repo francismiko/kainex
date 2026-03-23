@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TradesIndexRouteImport } from './routes/trades/index'
 import { Route as StrategiesIndexRouteImport } from './routes/strategies/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as RiskIndexRouteImport } from './routes/risk/index'
 import { Route as PortfolioIndexRouteImport } from './routes/portfolio/index'
 import { Route as MarketIndexRouteImport } from './routes/market/index'
@@ -30,6 +31,11 @@ const TradesIndexRoute = TradesIndexRouteImport.update({
 const StrategiesIndexRoute = StrategiesIndexRouteImport.update({
   id: '/strategies/',
   path: '/strategies/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RiskIndexRoute = RiskIndexRouteImport.update({
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/market/': typeof MarketIndexRoute
   '/portfolio/': typeof PortfolioIndexRoute
   '/risk/': typeof RiskIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/strategies/': typeof StrategiesIndexRoute
   '/trades/': typeof TradesIndexRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/market': typeof MarketIndexRoute
   '/portfolio': typeof PortfolioIndexRoute
   '/risk': typeof RiskIndexRoute
+  '/settings': typeof SettingsIndexRoute
   '/strategies': typeof StrategiesIndexRoute
   '/trades': typeof TradesIndexRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/market/': typeof MarketIndexRoute
   '/portfolio/': typeof PortfolioIndexRoute
   '/risk/': typeof RiskIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/strategies/': typeof StrategiesIndexRoute
   '/trades/': typeof TradesIndexRoute
 }
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/market/'
     | '/portfolio/'
     | '/risk/'
+    | '/settings/'
     | '/strategies/'
     | '/trades/'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/market'
     | '/portfolio'
     | '/risk'
+    | '/settings'
     | '/strategies'
     | '/trades'
   id:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/market/'
     | '/portfolio/'
     | '/risk/'
+    | '/settings/'
     | '/strategies/'
     | '/trades/'
   fileRoutesById: FileRoutesById
@@ -117,6 +129,7 @@ export interface RootRouteChildren {
   MarketIndexRoute: typeof MarketIndexRoute
   PortfolioIndexRoute: typeof PortfolioIndexRoute
   RiskIndexRoute: typeof RiskIndexRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
   StrategiesIndexRoute: typeof StrategiesIndexRoute
   TradesIndexRoute: typeof TradesIndexRoute
 }
@@ -142,6 +155,13 @@ declare module '@tanstack/react-router' {
       path: '/strategies'
       fullPath: '/strategies/'
       preLoaderRoute: typeof StrategiesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/risk/': {
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   MarketIndexRoute: MarketIndexRoute,
   PortfolioIndexRoute: PortfolioIndexRoute,
   RiskIndexRoute: RiskIndexRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
   StrategiesIndexRoute: StrategiesIndexRoute,
   TradesIndexRoute: TradesIndexRoute,
 }

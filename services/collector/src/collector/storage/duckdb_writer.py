@@ -66,7 +66,8 @@ class DuckDBWriter:
     def write_bars(self, bars: list[Bar]) -> None:
         if not bars:
             return
-        assert self._conn is not None, "Call connect() first"
+        if self._conn is None:
+            raise RuntimeError("DuckDBWriter not connected — call connect() first")
         records = [
             (
                 b.symbol,
@@ -94,7 +95,8 @@ class DuckDBWriter:
         self.write_bars([bar])
 
     def write_tick(self, tick: Tick) -> None:
-        assert self._conn is not None, "Call connect() first"
+        if self._conn is None:
+            raise RuntimeError("DuckDBWriter not connected — call connect() first")
         with self._lock:
             self._conn.execute(
                 """
@@ -119,7 +121,8 @@ class DuckDBWriter:
         timeframe: str,
         limit: int = 500,
     ) -> list[dict]:
-        assert self._conn is not None, "Call connect() first"
+        if self._conn is None:
+            raise RuntimeError("DuckDBWriter not connected — call connect() first")
         result = self._conn.execute(
             """
             SELECT symbol, market, timeframe, open, high, low, close, volume, ts
@@ -135,7 +138,8 @@ class DuckDBWriter:
 
     def export_parquet(self, market: str | None = None, symbol: str | None = None) -> None:
         """Export bars to Parquet files, partitioned by market/symbol."""
-        assert self._conn is not None, "Call connect() first"
+        if self._conn is None:
+            raise RuntimeError("DuckDBWriter not connected — call connect() first")
         os.makedirs(self._parquet_dir, exist_ok=True)
 
         where_clauses: list[str] = []

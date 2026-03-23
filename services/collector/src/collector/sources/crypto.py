@@ -87,10 +87,29 @@ class CryptoSource(AbstractDataSource):
         self,
         symbols: list[str],
         callback: Callable[[Tick], Coroutine[Any, Any, None]],
+        stop_event: asyncio.Event | None = None,
     ) -> None:
+        """Subscribe to real-time ticker updates for the given symbols.
+
+        .. note::
+            Current implementation uses REST polling (fetch_ticker) as a
+            placeholder.  For true real-time streaming with lower latency and
+            reduced rate-limit pressure, migrate to ``ccxt.pro``'s
+            ``watch_ticker`` WebSocket API::
+
+                async for ticker in exchange.watch_ticker(symbol):
+                    ...
+
+        Args:
+            symbols: List of trading pair symbols (e.g. ``["BTC/USDT"]``).
+            callback: Async callable invoked with each new ``Tick``.
+            stop_event: Optional :class:`asyncio.Event`. When set, the
+                polling loop exits gracefully.  If *None*, the loop runs
+                until cancelled externally.
+        """
         exchange = self._create_exchange()
         try:
-            while True:
+            while not (stop_event and stop_event.is_set()):
                 for symbol in symbols:
                     ticker = await exchange.fetch_ticker(symbol)
                     tick = Tick(
@@ -105,6 +124,12 @@ class CryptoSource(AbstractDataSource):
                         ),
                     )
                     await callback(tick)
-                await asyncio.sleep(1)
+                try:
+                    await asyncio.wait_for(
+                        stop_event.wait() if stop_event else asyncio.sleep(1),
+                        timeout=1,
+                    )
+                except TimeoutError:
+                    pass
         finally:
             await exchange.close()
