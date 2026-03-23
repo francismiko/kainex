@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { useTrades } from '@/hooks/use-api'
 import {
@@ -20,7 +21,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
-import { ArrowUpDown } from 'lucide-react'
+import { ArrowUpDown, Download } from 'lucide-react'
 
 export const Route = createFileRoute('/trades/')({
   component: Trades,
@@ -144,6 +145,28 @@ const columns: ColumnDef<TradeRow>[] = [
   },
 ]
 
+function exportTradesCSV(rows: TradeRow[]) {
+  const header = ['时间', '策略', '标的', '方向', '价格', '数量', '手续费', '盈亏']
+  const csvRows = [
+    header.join(','),
+    ...rows.map((r) =>
+      [r.time, r.strategy, r.symbol, r.side, r.price, r.quantity, r.fee, r.pnl].join(','),
+    ),
+  ]
+  const csvContent = '\uFEFF' + csvRows.join('\n')
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const now = new Date()
+  const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `kainex-trades-${ymd}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 function Trades() {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'time', desc: true }])
   const { data, isLoading, isError } = useTrades()
@@ -162,6 +185,10 @@ function Trades() {
     getSortedRowModel: getSortedRowModel(),
   })
 
+  const handleExportCSV = useCallback(() => {
+    exportTradesCSV(table.getSortedRowModel().rows.map((r) => r.original))
+  }, [table])
+
   if (isLoading) return <LoadingSkeleton />
 
   return (
@@ -176,8 +203,12 @@ function Trades() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>历史成交</CardTitle>
+          <Button variant="outline" size="sm" onClick={handleExportCSV}>
+            <Download className="h-4 w-4" />
+            导出 CSV
+          </Button>
         </CardHeader>
         <CardContent>
           <Table>

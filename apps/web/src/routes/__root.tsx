@@ -3,6 +3,7 @@ import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
+import { CommandSearch } from '@/components/shared/command-search'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { AlertTriangle } from 'lucide-react'
@@ -25,6 +26,7 @@ function RootLayout() {
             <Outlet />
           </main>
         </div>
+        <CommandSearch />
         <Toaster richColors position="top-right" />
         {import.meta.env.DEV && <TanStackRouterDevtools position="bottom-right" />}
       </div>
