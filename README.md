@@ -3,7 +3,7 @@
 ![License](https://img.shields.io/github/license/francismiko/kainex)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![React](https://img.shields.io/badge/React-19-blue)
-![Tests](https://img.shields.io/badge/Tests-169%20passing-green)
+![Tests](https://img.shields.io/badge/Tests-202%20passing-green)
 
 > The edge you engineer. -- Open-source multi-market quantitative trading platform.
 
@@ -18,15 +18,29 @@ Kainex 是一个开源的多市场量化交易平台，支持 A 股、加密货�
 - **Backtest engine** -- High-performance vectorized backtesting with equity curves, Sharpe/Sortino/Calmar ratios, and parameter optimization
 - **Paper trading** -- Realistic simulation with slippage model, per-market commission rules (A-share stamp tax, T+1), and order management
 - **Risk management** -- Position sizing limits, drawdown circuit breaker, max exposure controls
-- **7 built-in strategies** -- SMA crossover, dual MA, RSI mean reversion, Bollinger breakout, MACD crossover, momentum, ML signal -- all ready to extend
-- **Parameter optimization** -- Grid search with heatmap visualization, ranked by Sharpe/return/win rate
+- **9 built-in strategies** -- SMA crossover, dual MA, RSI mean reversion, Bollinger breakout, MACD crossover, momentum, ML signal, pairs trading, grid trading -- all ready to extend
+- **Parameter optimization** -- Grid search API with heatmap UI visualization, ranked by Sharpe/return/win rate
 - **NautilusTrader integration** -- Bridge interface (`KainexStrategy`) for running strategies on the NautilusTrader engine
-- **ML pipeline** -- Feature store (25+ features), model registry (versioned), ML predictor with RandomForest example
-- **Technical indicators** -- SMA, EMA, Bollinger Bands, RSI, MACD, Volume -- overlaid on K-line charts
+- **ML pipeline** -- Feature store (25+ features), model registry (versioned), training script with RandomForest example
+- **Technical indicators overlay** -- SMA, EMA, Bollinger Bands, RSI, MACD, Volume -- overlaid on K-line charts
 - **Strategy comparison** -- Side-by-side backtest comparison with equity curve overlay
 - **Real-time dashboard** -- K-line charts (TradingView Lightweight Charts), portfolio PnL, strategy monitoring, drawdown visualization, monthly return heatmap
-- **WebSocket streaming** -- Real-time market data and strategy signal subscriptions
-- **REST API** -- Full CRUD for strategies, backtests, portfolio, and market data
+- **WebSocket real-time streaming** -- Market data, strategy signals, portfolio updates, and execution logs
+- **Watchlist sidebar** -- Customizable symbol watchlist with real-time price updates
+- **Price alert system** -- Configurable price alerts with notification support
+- **Real-time execution logs** -- Live streaming log viewer for strategy execution and system events
+- **Trade journal** -- Trade notes and K-line annotations for post-trade analysis
+- **CSV export** -- Export backtest results and trade history to CSV
+- **Command+K search** -- Global keyboard shortcut for quick navigation and search
+- **Animated numbers** -- Smooth number transitions for real-time price and PnL updates
+- **Responsive mobile layout** -- Mobile-friendly responsive design across all pages
+- **Settings page** -- Theme toggle (light/dark) and color scheme customization
+- **Data management page** -- Data source status, storage usage, and import/export controls
+- **REST API** -- Full CRUD for strategies, backtests, portfolio, market data, alerts, and logs
+- **OpenAPI TypeScript generation** -- Auto-generated TypeScript types from OpenAPI schema
+- **Portless integration** -- Seamless service discovery without hardcoded ports
+- **launchd background service** -- macOS launchd plist for running collector as a background daemon
+- **Smoke test + Playwright E2E** -- Smoke test script and end-to-end browser tests (202 tests: 186 unit + 16 E2E)
 
 ## Tech Stack
 
@@ -101,9 +115,14 @@ just web          # Frontend only
 just collector    # Collector only
 just engine       # Engine API only
 just py-test      # Run Python tests
+just e2e          # Run Playwright E2E tests
+just smoke-test   # Run smoke test health checks
+just seed         # Seed database with sample data
 just build        # Build frontend
 just lint         # Lint frontend
 just typecheck    # Type check frontend
+just install-service   # Install launchd background service
+just uninstall-service # Uninstall launchd background service
 ```
 
 ## Project Structure
@@ -111,17 +130,32 @@ just typecheck    # Type check frontend
 ```
 kainex/
 ├── apps/web/                   # React frontend (Vite + TanStack)
-│   └── src/
-│       ├── components/         # UI components (charts, layout, strategy)
-│       ├── routes/             # File-based routing (market, portfolio, risk, strategies, trades)
-│       ├── hooks/              # Custom hooks (API, WebSocket)
-│       ├── stores/             # Zustand state management
-│       └── types/              # TypeScript type definitions
+│   ├── src/
+│   │   ├── components/         # UI components (charts, layout, strategy, trading, shared)
+│   │   ├── routes/             # File-based routing
+│   │   │   ├── market/         # Market data & K-line charts
+│   │   │   ├── portfolio/      # Portfolio PnL & positions
+│   │   │   ├── risk/           # Risk dashboard & drawdown
+│   │   │   ├── strategies/     # Strategy CRUD & comparison
+│   │   │   ├── trades/         # Trade journal & annotations
+│   │   │   ├── alerts/         # Price alert management
+│   │   │   ├── logs/           # Real-time execution logs
+│   │   │   ├── settings/       # Theme & color scheme settings
+│   │   │   └── data/           # Data management & import/export
+│   │   ├── hooks/              # Custom hooks (API, WebSocket)
+│   │   ├── stores/             # Zustand state management
+│   │   └── types/              # TypeScript type definitions
+│   └── e2e/                    # Playwright E2E tests
 ├── packages/
 │   ├── shared/                 # Shared Python data models (kainex-shared)
 │   ├── types/                  # Shared TypeScript types
 │   ├── ui/                     # Shared UI components
 │   └── chart-utils/            # Chart utility functions
+├── scripts/                    # Operational scripts
+│   ├── install-launchd.sh      # Install macOS launchd service
+│   ├── uninstall-launchd.sh    # Uninstall launchd service
+│   ├── smoke_test.sh           # Smoke test health checks
+│   └── com.kainex.collector.plist  # launchd plist definition
 ├── services/
 │   ├── collector/              # Market data collection service
 │   │   └── src/collector/
@@ -131,14 +165,14 @@ kainex/
 │   │       └── jobs/           # Scheduled collection jobs (intraday, EOD)
 │   └── engine/                 # Strategy engine + API service
 │       └── src/engine/
-│           ├── api/            # FastAPI routes (backtest, strategies, portfolio, market-data, websocket)
+│           ├── api/            # FastAPI routes (backtest, strategies, portfolio, market-data, alerts, logs, websocket)
 │           ├── core/           # Backtest engine, strategy runner, parameter optimizer
-│           ├── strategies/     # Strategy framework + 6 example strategies
+│           ├── strategies/     # Strategy framework + 9 example strategies
 │           ├── paper_trading/  # Paper broker, slippage model, commission rules
 │           ├── portfolio/      # Position tracker, PnL ledger, performance calculator
 │           ├── risk/           # Risk manager, drawdown circuit breaker, position limiter
 │           ├── indicators/     # Technical indicators (SMA, EMA, RSI, MACD, BBands, ATR)
-│           ├── ml/             # Feature store, model registry
+│           ├── ml/             # Feature store, model registry, training pipeline
 │           ├── storage/        # DuckDB store, SQLite store
 │           └── scheduler.py    # Async cron scheduler
 └── docker/                     # Docker Compose (optional TimescaleDB + Redis)
