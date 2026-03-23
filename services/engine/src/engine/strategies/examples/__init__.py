@@ -10,6 +10,8 @@ from engine.strategies.examples.macd_crossover import MacdCrossover
 from engine.strategies.examples.momentum import MomentumStrategy
 from engine.strategies.examples.dual_ma import DualMaStrategy
 from engine.strategies.examples.ml_signal import MLSignalStrategy
+from engine.strategies.examples.pairs_trading import PairsTradingStrategy
+from engine.strategies.examples.grid_trading import GridTradingStrategy
 
 __all__ = [
     "SmaCrossoverLegacy",
@@ -20,4 +22,6 @@ __all__ = [
     "MomentumStrategy",
     "DualMaStrategy",
     "MLSignalStrategy",
+    "PairsTradingStrategy",
+    "GridTradingStrategy",
 ]

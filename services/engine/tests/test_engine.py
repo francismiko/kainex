@@ -18,6 +18,8 @@ from engine.strategies.examples.bollinger_breakout import BollingerBreakout
 from engine.strategies.examples.macd_crossover import MacdCrossover
 from engine.strategies.examples.momentum import MomentumStrategy
 from engine.strategies.examples.dual_ma import DualMaStrategy
+from engine.strategies.examples.pairs_trading import PairsTradingStrategy
+from engine.strategies.examples.grid_trading import GridTradingStrategy
 from engine.core.runner import StrategyRunner
 
 
@@ -1060,3 +1062,154 @@ class TestLedger:
         records = ledger.records
         records.clear()
         assert len(ledger.records) == 1  # original not affected
+
+
+# --------------- PairsTradingStrategy ---------------
+
+class TestPairsTradingStrategy:
+    def test_parameters(self):
+        s = PairsTradingStrategy(
+            symbol_a="AAPL", symbol_b="MSFT",
+            lookback=30, entry_zscore=1.5, exit_zscore=0.3,
+        )
+        assert s.parameters() == {
+            "symbol_a": "AAPL",
+            "symbol_b": "MSFT",
+            "lookback": 30,
+            "entry_zscore": 1.5,
+            "exit_zscore": 0.3,
+        }
+
+    def test_short_a_long_b_on_high_zscore(self):
+        """When z-score > entry_zscore, should short A and long B."""
+        s = PairsTradingStrategy(symbol_a="A", symbol_b="B", lookback=5, entry_zscore=1.5, exit_zscore=0.3)
+        # Feed stable ratio bars to build history
+        for _ in range(5):
+            bar = pd.Series({"price_a": 100.0, "price_b": 100.0, "close": 100.0, "symbol": "A"})
+            s.on_bar(bar)
+        # Spike the ratio high: A jumps while B stays => high z
+        bar = pd.Series({"price_a": 120.0, "price_b": 100.0, "close": 120.0, "symbol": "A"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 2
+        # First signal: SELL A, second: BUY B
+        assert signals[0].symbol == "A"
+        assert signals[0].signal_type == SignalType.SELL
+        assert signals[1].symbol == "B"
+        assert signals[1].signal_type == SignalType.BUY
+
+    def test_long_a_short_b_on_low_zscore(self):
+        """When z-score < -entry_zscore, should long A and short B."""
+        s = PairsTradingStrategy(symbol_a="A", symbol_b="B", lookback=5, entry_zscore=1.5, exit_zscore=0.3)
+        for _ in range(5):
+            bar = pd.Series({"price_a": 100.0, "price_b": 100.0, "close": 100.0, "symbol": "A"})
+            s.on_bar(bar)
+        # Ratio drops: A drops while B stays
+        bar = pd.Series({"price_a": 80.0, "price_b": 100.0, "close": 80.0, "symbol": "A"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 2
+        assert signals[0].symbol == "A"
+        assert signals[0].signal_type == SignalType.BUY
+        assert signals[1].symbol == "B"
+        assert signals[1].signal_type == SignalType.SELL
+
+    def test_no_signal_insufficient_data(self):
+        """Should return empty signals when not enough data for lookback."""
+        s = PairsTradingStrategy(lookback=60)
+        for i in range(30):
+            bar = pd.Series({"price_a": 100.0 + i * 0.1, "price_b": 100.0, "close": 100.0, "symbol": "A"})
+            assert s.on_bar(bar) == []
+
+    def test_no_signal_without_prices(self):
+        """Should return empty when price_a or price_b is missing."""
+        s = PairsTradingStrategy(lookback=5)
+        bar = pd.Series({"close": 100.0, "symbol": "A"})
+        assert s.on_bar(bar) == []
+
+    def test_exit_on_mean_reversion(self):
+        """After entering a position, should flatten when |z| < exit_zscore."""
+        s = PairsTradingStrategy(symbol_a="A", symbol_b="B", lookback=10, entry_zscore=2.0, exit_zscore=0.5)
+        # Build 10 stable bars (ratio = 1.0)
+        for _ in range(10):
+            bar = pd.Series({"price_a": 100.0, "price_b": 100.0, "close": 100.0, "symbol": "A"})
+            s.on_bar(bar)
+        # Enter position: spike ratio to 1.5 => high z (~2.85)
+        bar = pd.Series({"price_a": 150.0, "price_b": 100.0, "close": 150.0, "symbol": "A"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 2  # entered short A / long B
+        assert s._position == -1
+        # Ratio returns to 1.0; spike still in window but mean is only slightly
+        # shifted so z is near 0 => exit
+        bar = pd.Series({"price_a": 100.0, "price_b": 100.0, "close": 100.0, "symbol": "A"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 2
+        # Flatten: BUY A back, SELL B back
+        assert signals[0].symbol == "A"
+        assert signals[0].signal_type == SignalType.BUY
+        assert signals[1].symbol == "B"
+        assert signals[1].signal_type == SignalType.SELL
+        assert s._position == 0
+
+
+# --------------- GridTradingStrategy ---------------
+
+class TestGridTradingStrategy:
+    def test_parameters(self):
+        s = GridTradingStrategy(grid_size=0.01, num_grids=20, base_price=50000.0)
+        assert s.parameters() == {
+            "grid_size": 0.01,
+            "num_grids": 20,
+            "base_price": 50000.0,
+        }
+
+    def test_buy_on_price_drop(self):
+        """Price dropping through a grid line should trigger a BUY."""
+        s = GridTradingStrategy(grid_size=0.02, num_grids=10, base_price=100.0)
+        # First bar initializes the grid
+        bar = pd.Series({"close": 100.0, "symbol": "BTC/USDT"})
+        assert s.on_bar(bar) == []
+        # Price drops below a grid line (2% down)
+        bar = pd.Series({"close": 96.0, "symbol": "BTC/USDT"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_sell_on_price_rise(self):
+        """Price rising through a grid line should trigger a SELL."""
+        s = GridTradingStrategy(grid_size=0.02, num_grids=10, base_price=100.0)
+        bar = pd.Series({"close": 100.0, "symbol": "BTC/USDT"})
+        s.on_bar(bar)
+        # Price rises above a grid line (2% up)
+        bar = pd.Series({"close": 104.0, "symbol": "BTC/USDT"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+
+    def test_no_signal_insufficient_data(self):
+        """First bar only initializes grid, no signal."""
+        s = GridTradingStrategy()
+        bar = pd.Series({"close": 100.0, "symbol": "BTC/USDT"})
+        assert s.on_bar(bar) == []
+
+    def test_no_signal_without_close(self):
+        """Should return empty when close is missing."""
+        s = GridTradingStrategy()
+        bar = pd.Series({"symbol": "BTC/USDT"})
+        assert s.on_bar(bar) == []
+
+    def test_no_signal_within_grid(self):
+        """Small price move within the same grid cell should not trigger."""
+        s = GridTradingStrategy(grid_size=0.05, num_grids=10, base_price=100.0)
+        bar = pd.Series({"close": 100.0, "symbol": "BTC/USDT"})
+        s.on_bar(bar)
+        # 1% move is within 5% grid
+        bar = pd.Series({"close": 101.0, "symbol": "BTC/USDT"})
+        assert s.on_bar(bar) == []
+
+    def test_auto_base_price(self):
+        """When base_price=0, first bar's close is used as base."""
+        s = GridTradingStrategy(grid_size=0.02, num_grids=10, base_price=0.0)
+        bar = pd.Series({"close": 200.0, "symbol": "BTC/USDT"})
+        s.on_bar(bar)  # initializes with base=200
+        assert s._initialized
+        # Grid lines should be around 200
+        assert any(abs(g - 200.0) < 0.01 for g in s._grid_lines)
