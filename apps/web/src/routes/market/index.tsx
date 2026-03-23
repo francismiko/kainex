@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
@@ -9,7 +10,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { PriceChart } from '@/components/charts/price-chart'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from '@/components/ui/dropdown-menu'
+import { PriceChart, type IndicatorConfig } from '@/components/charts/price-chart'
+import { Watchlist, type WatchlistSymbol } from '@/components/trading/watchlist'
 import { useMarketBars } from '@/hooks/use-api'
 import { useMarketStream, barToCandlestick } from '@/hooks/use-websocket'
 import type { CandlestickData, Time } from 'lightweight-charts'
@@ -18,7 +31,7 @@ export const Route = createFileRoute('/market/')({
   component: Market,
 })
 
-const symbols = [
+const symbols: (WatchlistSymbol & { apiMarket: string })[] = [
   { value: 'BTC/USDT', label: 'BTC/USDT', market: '加密货币', apiMarket: 'crypto' },
   { value: 'ETH/USDT', label: 'ETH/USDT', market: '加密货币', apiMarket: 'crypto' },
   { value: 'SOL/USDT', label: 'SOL/USDT', market: '加密货币', apiMarket: 'crypto' },
@@ -30,7 +43,7 @@ const symbols = [
 ]
 
 const timeframes = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
-type Timeframe = typeof timeframes[number]
+type Timeframe = (typeof timeframes)[number]
 
 const timeframeBarCounts: Record<Timeframe, number> = {
   '1m': 240,
@@ -50,7 +63,21 @@ function generateCandles(symbol: string, tf: Timeframe): CandlestickData<Time>[]
   }
 
   const count = timeframeBarCounts[tf]
-  const basePrice = symbol.includes('BTC') ? 62000 : symbol.includes('ETH') ? 3400 : symbol.includes('SOL') ? 145 : symbol.includes('茅台') ? 1700 : symbol.includes('宁德') ? 220 : symbol.includes('NVDA') ? 860 : symbol.includes('TSLA') ? 245 : 185
+  const basePrice = symbol.includes('BTC')
+    ? 62000
+    : symbol.includes('ETH')
+      ? 3400
+      : symbol.includes('SOL')
+        ? 145
+        : symbol.includes('茅台')
+          ? 1700
+          : symbol.includes('宁德')
+            ? 220
+            : symbol.includes('NVDA')
+              ? 860
+              : symbol.includes('TSLA')
+                ? 245
+                : 185
   const volatility = basePrice * 0.008
 
   const candles: CandlestickData<Time>[] = []
@@ -79,9 +106,8 @@ function generateCandles(symbol: string, tf: Timeframe): CandlestickData<Time>[]
     const high = Math.max(open, close) + random() * volatility * 0.5
     const low = Math.min(open, close) - random() * volatility * 0.5
 
-    const timeStr = tf === '1d'
-      ? date.toISOString().split('T')[0]
-      : Math.floor(date.getTime() / 1000)
+    const timeStr =
+      tf === '1d' ? date.toISOString().split('T')[0] : Math.floor(date.getTime() / 1000)
 
     candles.push({
       time: timeStr as Time,
@@ -95,7 +121,9 @@ function generateCandles(symbol: string, tf: Timeframe): CandlestickData<Time>[]
   return candles
 }
 
-function apiBarsToCandles(bars: { open: number; high: number; low: number; close: number; timestamp: string }[]): CandlestickData<Time>[] {
+function apiBarsToCandles(
+  bars: { open: number; high: number; low: number; close: number; timestamp: string }[],
+): CandlestickData<Time>[] {
   return bars.map((b) => ({
     time: b.timestamp.split('T')[0] as Time,
     open: b.open,
@@ -105,9 +133,23 @@ function apiBarsToCandles(bars: { open: number; high: number; low: number; close
   }))
 }
 
+// --------------- SMA/EMA period presets ---------------
+
+const PERIOD_OPTIONS = [5, 10, 20, 60] as const
+
+// --------------- Component ---------------
+
 function Market() {
   const [symbol, setSymbol] = useState('BTC/USDT')
   const [timeframe, setTimeframe] = useState<Timeframe>('1d')
+
+  // Indicator state — default: Volume + SMA(20)
+  const [volumeEnabled, setVolumeEnabled] = useState(true)
+  const [smaPeriods, setSmaPeriods] = useState<number[]>([20])
+  const [emaPeriods, setEmaPeriods] = useState<number[]>([])
+  const [bollingerEnabled, setBollingerEnabled] = useState(false)
+  const [rsiEnabled, setRsiEnabled] = useState(false)
+  const [macdEnabled, setMacdEnabled] = useState(false)
 
   const selectedSymbol = symbols.find((s) => s.value === symbol)
 
@@ -125,10 +167,8 @@ function Market() {
     return generateCandles(symbol, timeframe)
   }, [barsQuery.data, symbol, timeframe])
 
-  // Real-time WebSocket stream for the selected symbol + timeframe
   const { latestBar, status: wsStatus } = useMarketStream(symbol, timeframe)
 
-  // Convert the latest WebSocket bar to a CandlestickData for the chart
   const realtimeCandle = useMemo<CandlestickData<Time> | null>(() => {
     if (!latestBar) return null
     const converted = barToCandlestick(latestBar)
@@ -137,6 +177,39 @@ function Market() {
       time: converted.time as Time,
     }
   }, [latestBar])
+
+  // Build indicator config
+  const indicators = useMemo<IndicatorConfig>(() => {
+    const config: IndicatorConfig = {}
+    if (smaPeriods.length > 0) config.sma = smaPeriods
+    if (emaPeriods.length > 0) config.ema = emaPeriods
+    if (bollingerEnabled) config.bollinger = { period: 20, stdDev: 2 }
+    if (volumeEnabled) config.volume = true
+    if (rsiEnabled) config.rsi = 14
+    if (macdEnabled) config.macd = { fast: 12, slow: 26, signal: 9 }
+    return config
+  }, [smaPeriods, emaPeriods, bollingerEnabled, volumeEnabled, rsiEnabled, macdEnabled])
+
+  const toggleSmaPeriod = useCallback((period: number) => {
+    setSmaPeriods((prev) =>
+      prev.includes(period) ? prev.filter((p) => p !== period) : [...prev, period],
+    )
+  }, [])
+
+  const toggleEmaPeriod = useCallback((period: number) => {
+    setEmaPeriods((prev) =>
+      prev.includes(period) ? prev.filter((p) => p !== period) : [...prev, period],
+    )
+  }, [])
+
+  // Count active indicators for the badge
+  const activeCount =
+    smaPeriods.length +
+    emaPeriods.length +
+    (bollingerEnabled ? 1 : 0) +
+    (volumeEnabled ? 1 : 0) +
+    (rsiEnabled ? 1 : 0) +
+    (macdEnabled ? 1 : 0)
 
   return (
     <div className="space-y-6">
@@ -162,48 +235,163 @@ function Market() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <Select value={symbol} onValueChange={setSymbol}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {symbols.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      <span>{s.label}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">{s.market}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <CardTitle className="text-lg">
-                {selectedSymbol?.label ?? symbol}
-              </CardTitle>
-              {latestBar && (
-                <span className="text-sm font-mono text-muted-foreground">
-                  {latestBar.close.toFixed(2)}
-                </span>
-              )}
-            </div>
+      <div className="flex gap-4">
+        {/* Watchlist sidebar */}
+        <Card className="hidden w-56 shrink-0 lg:block">
+          <Watchlist
+            symbols={symbols}
+            selected={symbol}
+            onSelect={setSymbol}
+          />
+        </Card>
 
-            <Tabs value={timeframe} onValueChange={(v: string) => setTimeframe(v as Timeframe)}>
-              <TabsList>
-                {timeframes.map((tf) => (
-                  <TabsTrigger key={tf} value={tf} className="text-xs px-3">
-                    {tf}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <PriceChart data={candleData} realtimeBar={realtimeCandle} height={500} />
-        </CardContent>
-      </Card>
+        {/* Main chart area */}
+        <Card className="min-w-0 flex-1">
+          <CardHeader>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <Select value={symbol} onValueChange={setSymbol}>
+                  <SelectTrigger className="w-[200px] lg:hidden">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {symbols.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        <span>{s.label}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{s.market}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <CardTitle className="text-lg">{selectedSymbol?.label ?? symbol}</CardTitle>
+                {latestBar && (
+                  <span className="text-sm font-mono text-muted-foreground">
+                    {latestBar.close.toFixed(2)}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Indicator dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      指标
+                      {activeCount > 0 && (
+                        <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">
+                          {activeCount}
+                        </span>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {/* Overlay indicators */}
+                    <DropdownMenuLabel>主图叠加</DropdownMenuLabel>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        SMA
+                        {smaPeriods.length > 0 && (
+                          <span className="ml-auto text-[10px] text-muted-foreground">
+                            {smaPeriods.join(',')}
+                          </span>
+                        )}
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        {PERIOD_OPTIONS.map((p) => (
+                          <DropdownMenuCheckboxItem
+                            key={`sma-${p}`}
+                            checked={smaPeriods.includes(p)}
+                            onCheckedChange={() => toggleSmaPeriod(p)}
+                            onSelect={(e) => e.preventDefault()}
+                          >
+                            SMA({p})
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        EMA
+                        {emaPeriods.length > 0 && (
+                          <span className="ml-auto text-[10px] text-muted-foreground">
+                            {emaPeriods.join(',')}
+                          </span>
+                        )}
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        {PERIOD_OPTIONS.map((p) => (
+                          <DropdownMenuCheckboxItem
+                            key={`ema-${p}`}
+                            checked={emaPeriods.includes(p)}
+                            onCheckedChange={() => toggleEmaPeriod(p)}
+                            onSelect={(e) => e.preventDefault()}
+                          >
+                            EMA({p})
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuCheckboxItem
+                      checked={bollingerEnabled}
+                      onCheckedChange={(v) => setBollingerEnabled(!!v)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      Bollinger Bands (20, 2)
+                    </DropdownMenuCheckboxItem>
+
+                    <DropdownMenuSeparator />
+
+                    {/* Sub-chart indicators */}
+                    <DropdownMenuLabel>副图指标</DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem
+                      checked={volumeEnabled}
+                      onCheckedChange={(v) => setVolumeEnabled(!!v)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      成交量 (VOL)
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={rsiEnabled}
+                      onCheckedChange={(v) => setRsiEnabled(!!v)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      RSI (14)
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={macdEnabled}
+                      onCheckedChange={(v) => setMacdEnabled(!!v)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      MACD (12, 26, 9)
+                    </DropdownMenuCheckboxItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Tabs
+                  value={timeframe}
+                  onValueChange={(v: string) => setTimeframe(v as Timeframe)}
+                >
+                  <TabsList>
+                    {timeframes.map((tf) => (
+                      <TabsTrigger key={tf} value={tf} className="text-xs px-3">
+                        {tf}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <PriceChart
+              data={candleData}
+              realtimeBar={realtimeCandle}
+              height={500}
+              indicators={indicators}
+            />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
