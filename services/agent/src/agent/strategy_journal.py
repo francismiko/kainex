@@ -200,7 +200,7 @@ class StrategyJournal:
                 decision.get("action", "hold"),
                 decision.get("confidence", 0.0),
                 decision.get("analysis", ""),
-                decision.get("raw_response", ""),
+                json.dumps(decision.get("raw_response", ""), ensure_ascii=False) if isinstance(decision.get("raw_response"), dict) else str(decision.get("raw_response", "")),
                 now,
             ),
         )

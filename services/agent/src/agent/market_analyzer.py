@@ -19,31 +19,57 @@ class MarketAnalyzer:
         self._engine_url = engine_api_url.rstrip("/")
         self._http = httpx.AsyncClient(base_url=self._engine_url, timeout=30.0)
 
-    # ── Market data (DuckDB) ────────────────────────────────────
+    # ── Market data (via Engine API, fallback to DuckDB) ────────
 
-    def _connect(self) -> duckdb.DuckDBPyConnection:
-        return duckdb.connect(str(self._db_path), read_only=True)
-
-    def _query_bars(
+    async def _query_bars_api(
         self,
         symbol: str,
         market: str = "crypto",
         timeframe: str = "1d",
         limit: int = 200,
     ) -> pd.DataFrame:
-        conn = self._connect()
+        """Fetch bars from Engine API."""
         try:
-            df = conn.execute(
-                "SELECT * FROM bars "
-                "WHERE symbol = ? AND market = ? AND timeframe = ? "
-                "ORDER BY ts DESC LIMIT ?",
-                [symbol, market, timeframe, limit],
-            ).fetchdf()
-        finally:
-            conn.close()
-        if not df.empty:
-            df = df.sort_values("ts").set_index("ts")
-        return df
+            resp = await self._http.get(
+                "/api/market-data/bars",
+                params={"symbol": symbol, "market": market, "timeframe": timeframe, "limit": limit},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if not data:
+                return pd.DataFrame()
+            df = pd.DataFrame(data)
+            if "timestamp" in df.columns:
+                df["ts"] = pd.to_datetime(df["timestamp"])
+                df = df.sort_values("ts").set_index("ts")
+            return df
+        except Exception:
+            return pd.DataFrame()
+
+    def _query_bars_duckdb(
+        self,
+        symbol: str,
+        market: str = "crypto",
+        timeframe: str = "1d",
+        limit: int = 200,
+    ) -> pd.DataFrame:
+        """Fallback: read directly from DuckDB."""
+        try:
+            conn = duckdb.connect(str(self._db_path), read_only=True)
+            try:
+                df = conn.execute(
+                    "SELECT * FROM bars "
+                    "WHERE symbol = ? AND market = ? AND timeframe = ? "
+                    "ORDER BY ts DESC LIMIT ?",
+                    [symbol, market, timeframe, limit],
+                ).fetchdf()
+            finally:
+                conn.close()
+            if not df.empty:
+                df = df.sort_values("ts").set_index("ts")
+            return df
+        except Exception:
+            return pd.DataFrame()
 
     async def get_market_summary(
         self,
@@ -53,7 +79,9 @@ class MarketAnalyzer:
         bar_count: int = 200,
     ) -> dict:
         """Return a structured summary with price data and technical indicators."""
-        df = self._query_bars(symbol, market, timeframe, bar_count)
+        df = await self._query_bars_api(symbol, market, timeframe, bar_count)
+        if df.empty:
+            df = self._query_bars_duckdb(symbol, market, timeframe, bar_count)
         if df.empty:
             return {
                 "symbol": symbol,
