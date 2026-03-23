@@ -201,7 +201,9 @@ class ModelRegistry:
         """Return distinct model names registered."""
         conn = self._get_conn()
         try:
-            rows = conn.execute("SELECT DISTINCT name FROM models ORDER BY name").fetchall()
+            rows = conn.execute(
+                "SELECT DISTINCT name FROM models ORDER BY name"
+            ).fetchall()
         finally:
             conn.close()
         return [r["name"] for r in rows]

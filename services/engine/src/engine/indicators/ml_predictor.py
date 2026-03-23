@@ -56,7 +56,9 @@ class MLPredictor:
         """
         name = model_name or self.model_name
         if name is None:
-            logger.warning("No model name specified; predictor will return neutral signals.")
+            logger.warning(
+                "No model name specified; predictor will return neutral signals."
+            )
             return
 
         if self._registry is None:
@@ -67,7 +69,9 @@ class MLPredictor:
             self.model_name = name
             logger.info("Loaded model '%s' for inference.", name)
         except FileNotFoundError:
-            logger.warning("Model '%s' not found in registry; using neutral predictor.", name)
+            logger.warning(
+                "Model '%s' not found in registry; using neutral predictor.", name
+            )
             self._model = None
 
     # ------------------------------------------------------------------

@@ -45,3 +45,18 @@ class MarketDataResponse(BaseModel):
     symbol: str
     timeframe: str
     bars: list[BarData] = []
+
+
+class MarketStatus(BaseModel):
+    market: str
+    symbols: list[str]
+    total_bars: int
+    latest_bar_time: datetime | None = None
+    staleness_seconds: float | None = None
+    has_gaps: bool = False
+
+
+class MarketDataStatusResponse(BaseModel):
+    markets: list[MarketStatus]
+    total_bars: int
+    duckdb_size_mb: float

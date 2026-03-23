@@ -73,6 +73,14 @@ export function useTrades(page?: number) {
   })
 }
 
+export function useMarketDataStatus() {
+  return useQuery({
+    queryKey: ['market', 'status'],
+    queryFn: api.market.status,
+    refetchInterval: 30_000, // refresh every 30s
+  })
+}
+
 export function useMarketBars(params: {
   symbol: string
   market: string

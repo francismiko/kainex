@@ -125,8 +125,8 @@ export function useSignalStream(strategyId: string | null): SignalStreamResult {
 
     acquire()
     subscribe(channel)
-    setSignals([])
-    setLatestSignal(null)
+    // eslint-disable-next-line -- reset state on channel change is intentional
+    setSignals([]); setLatestSignal(null)
 
     const removeHandler = addMessageHandler((ch, payload) => {
       if (ch === channelRef.current) {

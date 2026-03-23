@@ -27,7 +27,9 @@ class FeatureStore:
     # Public API
     # ------------------------------------------------------------------
 
-    def compute_features(self, df: pd.DataFrame, market: str = "crypto") -> pd.DataFrame:
+    def compute_features(
+        self, df: pd.DataFrame, market: str = "crypto"
+    ) -> pd.DataFrame:
         """Generate a feature DataFrame from OHLCV data.
 
         Parameters
@@ -111,8 +113,8 @@ class FeatureStore:
 
         # --- Volatility ---
         features["rolling_std_20"] = close.pct_change().rolling(20).std()
-        features["realized_volatility"] = (
-            np.sqrt((np.log(close / close.shift(1)) ** 2).rolling(20).sum())
+        features["realized_volatility"] = np.sqrt(
+            (np.log(close / close.shift(1)) ** 2).rolling(20).sum()
         )
 
         # --- Volume ---

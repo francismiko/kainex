@@ -156,5 +156,18 @@ export const api = {
         `/api/market-data/latest?symbol=${symbol}&market=${market}`,
       ),
     symbols: () => apiFetch<string[]>('/api/market-data/symbols'),
+    status: () =>
+      apiFetch<{
+        markets: {
+          market: string
+          symbols: string[]
+          total_bars: number
+          latest_bar_time: string | null
+          staleness_seconds: number | null
+          has_gaps: boolean
+        }[]
+        total_bars: number
+        duckdb_size_mb: number
+      }>('/api/market-data/status'),
   },
 }

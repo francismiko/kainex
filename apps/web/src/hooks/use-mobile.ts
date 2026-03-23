@@ -1,21 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useSyncExternalStore } from 'react'
 
 const MOBILE_BREAKPOINT = 1024 // lg breakpoint
 
+function subscribeMobile(callback: () => void) {
+  const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
+  mql.addEventListener('change', callback)
+  return () => mql.removeEventListener('change', callback)
+}
+
+function getSnapshotMobile() {
+  return window.innerWidth < MOBILE_BREAKPOINT
+}
+
+function getServerSnapshotMobile() {
+  return false
+}
+
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false,
-  )
-
-  useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    mql.addEventListener('change', handler)
-    setIsMobile(mql.matches)
-    return () => mql.removeEventListener('change', handler)
-  }, [])
-
-  return isMobile
+  return useSyncExternalStore(subscribeMobile, getSnapshotMobile, getServerSnapshotMobile)
 }
 
 /**

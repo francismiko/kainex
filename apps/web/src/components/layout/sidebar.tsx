@@ -7,6 +7,7 @@ import {
   ArrowRightLeft,
   Briefcase,
   ShieldAlert,
+  Database,
   ChevronLeft,
   Settings,
 } from 'lucide-react'
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { to: '/trades', label: '交易记录', icon: ArrowRightLeft },
   { to: '/portfolio', label: '持仓组合', icon: Briefcase },
   { to: '/risk', label: '风控监控', icon: ShieldAlert },
+  { to: '/data', label: '数据管理', icon: Database },
 ]
 
 /** Inner sidebar content shared between desktop sidebar and mobile Sheet */
