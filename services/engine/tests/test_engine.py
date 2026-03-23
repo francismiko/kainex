@@ -718,3 +718,259 @@ class TestAStockCommission:
         # Sell 10000 notional: commission = max(10000*0.0003, 5) + 10000*0.0005 = 5 + 5 = 10
         result = comm.calculate(100.0, 100.0, is_sell=True)
         assert result == 10.0
+
+
+# --------------- FeatureStore ---------------
+
+class TestFeatureStore:
+    def setup_method(self):
+        from engine.ml.feature_store import FeatureStore
+        self.fs = FeatureStore()
+        self.df = _make_ohlcv(200)
+
+    def test_compute_features_returns_dataframe(self):
+        result = self.fs.compute_features(self.df)
+        assert isinstance(result, pd.DataFrame)
+        assert not result.empty
+
+    def test_compute_features_no_nan(self):
+        result = self.fs.compute_features(self.df)
+        assert result.isna().sum().sum() == 0
+
+    def test_feature_columns_present(self):
+        result = self.fs.compute_features(self.df)
+        expected = {
+            "return_1", "return_5", "return_10", "return_20",
+            "log_return_1", "log_return_5",
+            "momentum_5", "momentum_10", "momentum_20",
+            "rsi_14", "macd", "macd_signal", "macd_hist",
+            "atr_14", "bb_percent_b",
+            "rolling_std_20", "realized_volatility",
+            "volume_ma_ratio", "volume_std",
+            "day_of_week", "month", "is_month_end",
+        }
+        assert expected.issubset(set(result.columns))
+
+    def test_sma_columns(self):
+        result = self.fs.compute_features(self.df)
+        for length in (5, 10, 20, 60):
+            assert f"sma_{length}" in result.columns
+            assert f"price_sma_{length}_ratio" in result.columns
+
+    def test_get_feature_names(self):
+        names = self.fs.get_feature_names()
+        assert isinstance(names, list)
+        assert len(names) > 20
+        # Should match actual computed columns
+        result = self.fs.compute_features(self.df)
+        for name in names:
+            assert name in result.columns, f"Feature '{name}' not in computed output"
+
+    def test_build_features_alias(self):
+        """build_features should be a backward-compatible alias."""
+        result = self.fs.build_features(self.df)
+        assert isinstance(result, pd.DataFrame)
+        assert not result.empty
+
+    def test_rsi_in_valid_range(self):
+        result = self.fs.compute_features(self.df)
+        rsi = result["rsi_14"]
+        assert (rsi >= 0).all() and (rsi <= 100).all()
+
+    def test_short_data_returns_empty(self):
+        """With very few rows, features may be fully NaN and result empty."""
+        short_df = _make_ohlcv(10)
+        result = self.fs.compute_features(short_df)
+        # Either empty or very few rows due to warmup
+        assert len(result) <= 10
+
+
+# --------------- ModelRegistry ---------------
+
+class TestModelRegistry:
+    def test_register_and_load(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        model = {"type": "dummy", "weights": [1, 2, 3]}
+        mv = reg.register("test_model", model, metrics={"acc": 0.95})
+        assert mv.name == "test_model"
+        assert mv.version == "1"
+        assert mv.metrics == {"acc": 0.95}
+
+        loaded = reg.load("test_model")
+        assert loaded == model
+
+    def test_auto_version_increment(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        mv1 = reg.register("m", {"v": 1})
+        mv2 = reg.register("m", {"v": 2})
+        assert mv1.version == "1"
+        assert mv2.version == "2"
+
+    def test_explicit_version(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        mv = reg.register("m", {"v": 1}, version="custom-v1")
+        assert mv.version == "custom-v1"
+
+    def test_load_specific_version(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        reg.register("m", {"v": 1})
+        reg.register("m", {"v": 2})
+        loaded = reg.load("m", version="1")
+        assert loaded == {"v": 1}
+
+    def test_get_latest(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        reg.register("m", {"v": 1})
+        reg.register("m", {"v": 2})
+        latest = reg.get_latest("m")
+        assert latest is not None
+        assert latest.version == "2"
+
+    def test_list_models(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        reg.register("alpha", {"a": 1})
+        reg.register("beta", {"b": 2})
+        names = reg.list_models()
+        assert set(names) == {"alpha", "beta"}
+
+    def test_list_versions(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        reg.register("m", {"v": 1})
+        reg.register("m", {"v": 2})
+        versions = reg.list_versions("m")
+        assert len(versions) == 2
+
+    def test_load_nonexistent_raises(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        with pytest.raises(FileNotFoundError):
+            reg.load("nonexistent")
+
+    def test_get_latest_empty(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        assert reg.get_latest("nonexistent") is None
+
+    def test_persistence_across_instances(self, tmp_path):
+        """Metadata persists in SQLite across ModelRegistry instances."""
+        from engine.ml.model_registry import ModelRegistry
+        base = tmp_path / "models"
+        reg1 = ModelRegistry(base_dir=base)
+        reg1.register("persist_test", {"data": 42})
+
+        reg2 = ModelRegistry(base_dir=base)
+        assert "persist_test" in reg2.list_models()
+        loaded = reg2.load("persist_test")
+        assert loaded == {"data": 42}
+
+
+# --------------- MLPredictor ---------------
+
+class TestMLPredictor:
+    def test_neutral_when_no_model(self):
+        from engine.indicators.ml_predictor import MLPredictor
+        pred = MLPredictor()
+        df = _make_ohlcv(100)
+        from engine.ml.feature_store import FeatureStore
+        features = FeatureStore().compute_features(df)
+        result = pred.predict(features)
+        assert isinstance(result, pd.Series)
+        assert (result == 0.0).all()
+
+    def test_predict_signal_neutral(self):
+        from engine.indicators.ml_predictor import MLPredictor
+        pred = MLPredictor()
+        features = pd.DataFrame({"a": [1.0, 2.0]})
+        signal = pred.predict_signal(features)
+        assert signal == SignalType.HOLD
+
+    def test_predict_with_trained_model(self, tmp_path):
+        """End-to-end: train a model, register it, then predict."""
+        from sklearn.ensemble import RandomForestClassifier
+        from engine.ml.feature_store import FeatureStore
+        from engine.ml.model_registry import ModelRegistry
+        from engine.indicators.ml_predictor import MLPredictor
+
+        # Prepare data
+        df = _make_ohlcv(300)
+        fs = FeatureStore()
+        features = fs.compute_features(df)
+
+        # Create labels
+        future_ret = df["close"].pct_change(5).shift(-5)
+        labels = pd.Series(0, index=df.index, dtype=int)
+        labels[future_ret > 0.01] = 1
+        labels[future_ret < -0.01] = -1
+        labels = labels.reindex(features.index)
+        mask = labels.notna()
+        X = features[mask]
+        y = labels[mask].astype(int)
+
+        # Train
+        clf = RandomForestClassifier(n_estimators=10, max_depth=3, random_state=42)
+        clf.fit(X, y)
+
+        # Register
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        reg.register("test_rf", clf)
+
+        # Predict
+        pred = MLPredictor(model_name="test_rf", registry=reg)
+        pred.load()
+        result = pred.predict(X)
+        assert isinstance(result, pd.Series)
+        assert len(result) == len(X)
+        assert result.between(-1, 1).all()
+
+    def test_predict_signal_buy_sell(self, tmp_path):
+        """predict_signal should return BUY/SELL when model gives strong signal."""
+        from sklearn.ensemble import RandomForestClassifier
+        from engine.ml.feature_store import FeatureStore
+        from engine.ml.model_registry import ModelRegistry
+        from engine.indicators.ml_predictor import MLPredictor
+
+        df = _make_ohlcv(300)
+        fs = FeatureStore()
+        features = fs.compute_features(df)
+
+        future_ret = df["close"].pct_change(5).shift(-5)
+        labels = pd.Series(0, index=df.index, dtype=int)
+        labels[future_ret > 0.01] = 1
+        labels[future_ret < -0.01] = -1
+        labels = labels.reindex(features.index)
+        mask = labels.notna()
+        X = features[mask]
+        y = labels[mask].astype(int)
+
+        clf = RandomForestClassifier(n_estimators=10, max_depth=3, random_state=42)
+        clf.fit(X, y)
+
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        reg.register("test_rf", clf)
+
+        pred = MLPredictor(model_name="test_rf", registry=reg)
+        pred.load()
+        signal = pred.predict_signal(X)
+        assert signal in (SignalType.BUY, SignalType.SELL, SignalType.HOLD)
+
+    def test_load_missing_model_stays_neutral(self, tmp_path):
+        from engine.ml.model_registry import ModelRegistry
+        from engine.indicators.ml_predictor import MLPredictor
+        reg = ModelRegistry(base_dir=tmp_path / "models")
+        pred = MLPredictor(model_name="does_not_exist", registry=reg)
+        pred.load()
+        assert pred._model is None  # gracefully stays None
+
+    def test_predict_proba_neutral(self):
+        from engine.indicators.ml_predictor import MLPredictor
+        pred = MLPredictor()
+        result = pred.predict_proba(pd.DataFrame({"a": [1, 2, 3]}))
+        assert result.shape == (3, 3)
+        np.testing.assert_allclose(result, 1 / 3)

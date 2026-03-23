@@ -9,6 +9,7 @@ from engine.strategies.examples.bollinger_breakout import BollingerBreakout
 from engine.strategies.examples.macd_crossover import MacdCrossover
 from engine.strategies.examples.momentum import MomentumStrategy
 from engine.strategies.examples.dual_ma import DualMaStrategy
+from engine.strategies.examples.ml_signal import MLSignalStrategy
 
 __all__ = [
     "SmaCrossoverLegacy",
@@ -18,4 +19,5 @@ __all__ = [
     "MacdCrossover",
     "MomentumStrategy",
     "DualMaStrategy",
+    "MLSignalStrategy",
 ]
