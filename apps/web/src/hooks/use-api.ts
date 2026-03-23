@@ -1,0 +1,69 @@
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query'
+import { api } from '@/lib/api-client'
+
+export function useStrategies() {
+  return useQuery({
+    queryKey: ['strategies'],
+    queryFn: api.strategies.list,
+  })
+}
+
+export function useStrategy(id: string) {
+  return useQuery({
+    queryKey: ['strategies', id],
+    queryFn: () => api.strategies.get(id),
+  })
+}
+
+export function useStartStrategy() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.strategies.start(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['strategies'] }),
+  })
+}
+
+export function useStopStrategy() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.strategies.stop(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['strategies'] }),
+  })
+}
+
+export function usePortfolioSummary() {
+  return useQuery({
+    queryKey: ['portfolio', 'summary'],
+    queryFn: api.portfolio.summary,
+  })
+}
+
+export function usePositions() {
+  return useQuery({
+    queryKey: ['portfolio', 'positions'],
+    queryFn: api.portfolio.positions,
+  })
+}
+
+export function useTrades(page?: number) {
+  return useQuery({
+    queryKey: ['portfolio', 'trades', page],
+    queryFn: () => api.portfolio.trades(page),
+  })
+}
+
+export function useMarketBars(params: {
+  symbol: string
+  market: string
+  timeframe: string
+  limit?: number
+}) {
+  return useQuery({
+    queryKey: ['market', 'bars', params],
+    queryFn: () => api.market.bars(params),
+  })
+}

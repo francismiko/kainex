@@ -1,6 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
+import { useTrades } from '@/hooks/use-api'
 import {
   Table,
   TableBody,
@@ -23,7 +26,7 @@ export const Route = createFileRoute('/trades/')({
   component: Trades,
 })
 
-interface Trade {
+interface TradeRow {
   id: string
   time: string
   strategy: string
@@ -35,7 +38,7 @@ interface Trade {
   pnl: number
 }
 
-const mockTrades: Trade[] = [
+const mockTrades: TradeRow[] = [
   { id: '1', time: '2026-03-23 10:32:15', strategy: 'SMA 交叉', symbol: 'BTC/USDT', side: '买入', price: 63150, quantity: 0.5, fee: 15.79, pnl: 0 },
   { id: '2', time: '2026-03-23 10:15:42', strategy: 'RSI 均值回归', symbol: 'ETH/USDT', side: '卖出', price: 3385, quantity: 5.0, fee: 8.46, pnl: 425.0 },
   { id: '3', time: '2026-03-23 09:45:03', strategy: '动量跟踪', symbol: 'AAPL', side: '买入', price: 188.50, quantity: 50, fee: 1.50, pnl: 0 },
@@ -58,7 +61,21 @@ const mockTrades: Trade[] = [
   { id: '20', time: '2026-03-20 10:30:28', strategy: '动量跟踪', symbol: 'TSLA', side: '买入', price: 250.00, quantity: 20, fee: 0.80, pnl: 0 },
 ]
 
-const columns: ColumnDef<Trade>[] = [
+function apiTradesToDisplay(trades: { id: string; symbol: string; side: string; price: number; quantity: number; timestamp: string; strategyId: string }[]): TradeRow[] {
+  return trades.map((t) => ({
+    id: t.id,
+    time: t.timestamp,
+    strategy: t.strategyId,
+    symbol: t.symbol,
+    side: t.side === 'buy' ? '买入' as const : '卖出' as const,
+    price: t.price,
+    quantity: t.quantity,
+    fee: 0,
+    pnl: 0,
+  }))
+}
+
+const columns: ColumnDef<TradeRow>[] = [
   {
     accessorKey: 'time',
     header: ({ column }) => (
@@ -129,9 +146,15 @@ const columns: ColumnDef<Trade>[] = [
 
 function Trades() {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'time', desc: true }])
+  const { data, isLoading, isError } = useTrades()
+
+  const trades = useMemo(
+    () => (data ? apiTradesToDisplay(data) : mockTrades),
+    [data],
+  )
 
   const table = useReactTable({
-    data: mockTrades,
+    data: trades,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -139,9 +162,18 @@ function Trades() {
     getSortedRowModel: getSortedRowModel(),
   })
 
+  if (isLoading) return <LoadingSkeleton />
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">交易记录</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold">交易记录</h1>
+        {isError && (
+          <Badge variant="outline" className="text-muted-foreground">
+            展示示例数据
+          </Badge>
+        )}
+      </div>
 
       <Card>
         <CardHeader>

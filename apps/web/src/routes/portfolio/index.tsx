@@ -2,6 +2,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PnlChart } from '@/components/charts/pnl-chart'
+import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
+import { usePortfolioSummary, usePositions } from '@/hooks/use-api'
+import { formatNumber } from '@/lib/format'
 import {
   Table,
   TableBody,
@@ -31,36 +34,74 @@ const mockPositions = [
   { symbol: 'NVDA', market: '美股', side: '多' as const, qty: '25', avgPrice: '850.00', currentPrice: '872.30', unrealizedPnl: 557.5, unrealizedPct: 2.62 },
 ]
 
+function apiPositionsToDisplay(positions: { symbol: string; side: string; quantity: number; entryPrice: number; currentPrice: number; unrealizedPnl: number }[]) {
+  return positions.map((p) => ({
+    symbol: p.symbol,
+    market: '-',
+    side: (p.side === 'long' ? '多' : '空') as '多' | '空',
+    qty: String(p.quantity),
+    avgPrice: formatNumber(p.entryPrice),
+    currentPrice: formatNumber(p.currentPrice),
+    unrealizedPnl: p.unrealizedPnl,
+    unrealizedPct: p.entryPrice ? ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100 : 0,
+  }))
+}
+
 function Portfolio() {
-  const totalUnrealized = mockPositions.reduce((sum, p) => sum + p.unrealizedPnl, 0)
+  const summaryQuery = usePortfolioSummary()
+  const positionsQuery = usePositions()
+
+  if (summaryQuery.isLoading && positionsQuery.isLoading) return <LoadingSkeleton />
+
+  const positions = positionsQuery.data
+    ? apiPositionsToDisplay(positionsQuery.data)
+    : mockPositions
+
+  const totalUnrealized = positions.reduce((sum, p) => sum + p.unrealizedPnl, 0)
+
+  const summaryData = summaryQuery.data
+  const usingMock = !summaryData && !positionsQuery.data
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">持仓组合</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold">持仓组合</h1>
+        {usingMock && (
+          <Badge variant="outline" className="text-muted-foreground">
+            展示示例数据
+          </Badge>
+        )}
+      </div>
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">夏普比率</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">总资产</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1.87</div>
+            <div className="text-2xl font-bold">
+              {summaryData ? formatNumber(summaryData.totalValue) : '¥1,234,567'}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">最大回撤</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">可用资金</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-loss">-8.3%</div>
+            <div className="text-2xl font-bold">
+              {summaryData ? formatNumber(summaryData.cash) : '¥456,789'}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">胜率</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">今日盈亏</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">62.5%</div>
+            <div className={`text-2xl font-bold ${(summaryData?.dailyPnl ?? 1200) >= 0 ? 'text-profit' : 'text-loss'}`}>
+              {summaryData ? (summaryData.dailyPnl >= 0 ? '+' : '') + formatNumber(summaryData.dailyPnl) : '+1,200'}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -102,7 +143,7 @@ function Portfolio() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockPositions.map((p) => (
+              {positions.map((p) => (
                 <TableRow key={p.symbol}>
                   <TableCell className="font-medium">{p.symbol}</TableCell>
                   <TableCell className="text-muted-foreground">{p.market}</TableCell>

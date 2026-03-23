@@ -121,6 +121,27 @@ class SQLiteStore:
             return None
         return self._row_to_dict(row)
 
+    async def update_strategy_fields(self, id: str, fields: dict) -> None:
+        """Update specific fields on a strategy config."""
+        now = datetime.now(timezone.utc).isoformat()
+        set_clauses = []
+        params = []
+        for key, value in fields.items():
+            if key == "parameters":
+                set_clauses.append("parameters = ?")
+                params.append(json.dumps(value))
+            elif key in ("status", "name", "class_name"):
+                set_clauses.append(f"{key} = ?")
+                params.append(value)
+        set_clauses.append("updated_at = ?")
+        params.append(now)
+        params.append(id)
+        await self.db.execute(
+            f"UPDATE strategy_configs SET {', '.join(set_clauses)} WHERE id = ?",
+            params,
+        )
+        await self.db.commit()
+
     async def list_strategy_configs(self) -> list[dict]:
         cursor = await self.db.execute("SELECT * FROM strategy_configs ORDER BY created_at DESC")
         rows = await cursor.fetchall()

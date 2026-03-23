@@ -13,6 +13,11 @@ from engine.risk.drawdown import DrawdownCircuitBreaker
 from engine.risk.position import PositionLimiter
 from engine.strategies.base import Signal, SignalType, Market
 from engine.strategies.examples.sma_crossover import SmaCrossoverLegacy
+from engine.strategies.examples.rsi_mean_reversion import RsiMeanReversion
+from engine.strategies.examples.bollinger_breakout import BollingerBreakout
+from engine.strategies.examples.macd_crossover import MacdCrossover
+from engine.strategies.examples.momentum import MomentumStrategy
+from engine.strategies.examples.dual_ma import DualMaStrategy
 from engine.core.runner import StrategyRunner
 
 
@@ -324,6 +329,183 @@ class TestSmaCrossoverStrategy:
         s = SmaCrossoverLegacy()
         bar = pd.Series({"close": 100, "symbol": "TEST"})
         assert s.on_bar(bar) == []
+
+
+# --------------- RsiMeanReversion ---------------
+
+class TestRsiMeanReversion:
+    def test_parameters(self):
+        s = RsiMeanReversion(rsi_period=10, oversold=25.0, overbought=75.0)
+        assert s.parameters() == {"rsi_period": 10, "oversold": 25.0, "overbought": 75.0}
+
+    def test_buy_on_oversold(self):
+        s = RsiMeanReversion()
+        bar = pd.Series({"close": 100.0, "rsi": 20.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_sell_on_overbought(self):
+        s = RsiMeanReversion()
+        bar = pd.Series({"close": 100.0, "rsi": 80.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+
+    def test_no_signal_in_neutral_zone(self):
+        s = RsiMeanReversion()
+        bar = pd.Series({"close": 100.0, "rsi": 50.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+    def test_no_signal_without_rsi(self):
+        s = RsiMeanReversion()
+        bar = pd.Series({"close": 100.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+
+# --------------- BollingerBreakout ---------------
+
+class TestBollingerBreakout:
+    def test_parameters(self):
+        s = BollingerBreakout(bb_period=15, bb_std=1.5)
+        assert s.parameters() == {"bb_period": 15, "bb_std": 1.5}
+
+    def test_buy_above_upper(self):
+        s = BollingerBreakout()
+        bar = pd.Series({"close": 110.0, "bb_upper": 105.0, "bb_lower": 95.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_sell_below_lower(self):
+        s = BollingerBreakout()
+        bar = pd.Series({"close": 90.0, "bb_upper": 105.0, "bb_lower": 95.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+
+    def test_no_signal_within_bands(self):
+        s = BollingerBreakout()
+        bar = pd.Series({"close": 100.0, "bb_upper": 105.0, "bb_lower": 95.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+    def test_no_signal_without_bands(self):
+        s = BollingerBreakout()
+        bar = pd.Series({"close": 100.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+
+# --------------- MacdCrossover ---------------
+
+class TestMacdCrossover:
+    def test_parameters(self):
+        s = MacdCrossover(fast_period=8, slow_period=21, signal_period=5)
+        assert s.parameters() == {"fast_period": 8, "slow_period": 21, "signal_period": 5}
+
+    def test_buy_on_crossover(self):
+        s = MacdCrossover()
+        # First bar: MACD below signal
+        bar1 = pd.Series({"close": 100.0, "macd": -1.0, "macd_signal": 0.0, "symbol": "TEST"})
+        assert s.on_bar(bar1) == []
+        # Second bar: MACD crosses above signal
+        bar2 = pd.Series({"close": 105.0, "macd": 1.0, "macd_signal": 0.0, "symbol": "TEST"})
+        signals = s.on_bar(bar2)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_sell_on_crossunder(self):
+        s = MacdCrossover()
+        bar1 = pd.Series({"close": 100.0, "macd": 1.0, "macd_signal": 0.0, "symbol": "TEST"})
+        s.on_bar(bar1)
+        bar2 = pd.Series({"close": 95.0, "macd": -1.0, "macd_signal": 0.0, "symbol": "TEST"})
+        signals = s.on_bar(bar2)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+
+    def test_no_signal_without_macd(self):
+        s = MacdCrossover()
+        bar = pd.Series({"close": 100.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+
+# --------------- MomentumStrategy ---------------
+
+class TestMomentumStrategy:
+    def test_parameters(self):
+        s = MomentumStrategy(lookback=10, threshold=0.05)
+        assert s.parameters() == {"lookback": 10, "threshold": 0.05}
+
+    def test_buy_on_positive_momentum(self):
+        s = MomentumStrategy(lookback=3, threshold=0.02)
+        # Feed warmup bars
+        for price in [100.0, 100.0, 100.0]:
+            bar = pd.Series({"close": price, "symbol": "TEST"})
+            s.on_bar(bar)
+        # Price jumps 5% -> should trigger buy
+        bar = pd.Series({"close": 105.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_sell_on_negative_momentum(self):
+        s = MomentumStrategy(lookback=3, threshold=0.02)
+        for price in [100.0, 100.0, 100.0]:
+            bar = pd.Series({"close": price, "symbol": "TEST"})
+            s.on_bar(bar)
+        bar = pd.Series({"close": 95.0, "symbol": "TEST"})
+        signals = s.on_bar(bar)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+
+    def test_no_signal_insufficient_data(self):
+        s = MomentumStrategy(lookback=20)
+        for i in range(10):
+            bar = pd.Series({"close": 100.0 + i, "symbol": "TEST"})
+            assert s.on_bar(bar) == []
+
+    def test_no_signal_within_threshold(self):
+        s = MomentumStrategy(lookback=3, threshold=0.10)
+        for price in [100.0, 100.0, 100.0]:
+            bar = pd.Series({"close": price, "symbol": "TEST"})
+            s.on_bar(bar)
+        # Only 1% move, below 10% threshold
+        bar = pd.Series({"close": 101.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+
+# --------------- DualMaStrategy ---------------
+
+class TestDualMaStrategy:
+    def test_parameters(self):
+        s = DualMaStrategy(fast_period=5, slow_period=20, ma_type="sma")
+        assert s.parameters() == {"fast_period": 5, "slow_period": 20, "ma_type": "sma"}
+
+    def test_buy_on_golden_cross(self):
+        s = DualMaStrategy()
+        bar1 = pd.Series({"close": 100.0, "ma_fast": 95.0, "ma_slow": 100.0, "symbol": "TEST"})
+        assert s.on_bar(bar1) == []
+        bar2 = pd.Series({"close": 105.0, "ma_fast": 101.0, "ma_slow": 100.0, "symbol": "TEST"})
+        signals = s.on_bar(bar2)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.BUY
+
+    def test_sell_on_death_cross(self):
+        s = DualMaStrategy()
+        bar1 = pd.Series({"close": 100.0, "ma_fast": 101.0, "ma_slow": 100.0, "symbol": "TEST"})
+        s.on_bar(bar1)
+        bar2 = pd.Series({"close": 95.0, "ma_fast": 99.0, "ma_slow": 100.0, "symbol": "TEST"})
+        signals = s.on_bar(bar2)
+        assert len(signals) == 1
+        assert signals[0].signal_type == SignalType.SELL
+
+    def test_no_signal_without_ma(self):
+        s = DualMaStrategy()
+        bar = pd.Series({"close": 100.0, "symbol": "TEST"})
+        assert s.on_bar(bar) == []
+
+    def test_default_ma_type_is_ema(self):
+        s = DualMaStrategy()
+        assert s.parameters()["ma_type"] == "ema"
 
 
 # --------------- StrategyRunner ---------------

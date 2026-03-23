@@ -5,18 +5,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from engine.api.routes import backtest, market_data, portfolio, strategies, websocket
+from engine.storage.sqlite_store import SQLiteStore
+from engine.storage.duckdb_store import DuckDBStore
+from engine.strategies.registry import StrategyRegistry, registry as strategy_registry
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: initialize connections
-    # TODO: setup Redis and DB connections
-    app.state.redis = None
-    app.state.db = None
+    # Startup: initialize storage connections
+    sqlite_store = SQLiteStore()
+    await sqlite_store.connect()
+    duckdb_store = DuckDBStore()
+    app.state.sqlite_store = sqlite_store
+    app.state.duckdb_store = duckdb_store
+    app.state.strategy_registry = strategy_registry
     yield
     # Shutdown: close connections
-    if app.state.redis:
-        await app.state.redis.close()
+    await sqlite_store.close()
+    duckdb_store.close()
 
 
 app = FastAPI(

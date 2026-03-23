@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PriceChart } from '@/components/charts/price-chart'
+import { useMarketBars } from '@/hooks/use-api'
 import type { CandlestickData, Time } from 'lightweight-charts'
 
 export const Route = createFileRoute('/market/')({
@@ -17,14 +18,14 @@ export const Route = createFileRoute('/market/')({
 })
 
 const symbols = [
-  { value: 'BTC/USDT', label: 'BTC/USDT', market: '加密货币' },
-  { value: 'ETH/USDT', label: 'ETH/USDT', market: '加密货币' },
-  { value: 'SOL/USDT', label: 'SOL/USDT', market: '加密货币' },
-  { value: '贵州茅台', label: '贵州茅台 (600519)', market: 'A股' },
-  { value: '宁德时代', label: '宁德时代 (300750)', market: 'A股' },
-  { value: 'AAPL', label: 'AAPL', market: '美股' },
-  { value: 'TSLA', label: 'TSLA', market: '美股' },
-  { value: 'NVDA', label: 'NVDA', market: '美股' },
+  { value: 'BTC/USDT', label: 'BTC/USDT', market: '加密货币', apiMarket: 'crypto' },
+  { value: 'ETH/USDT', label: 'ETH/USDT', market: '加密货币', apiMarket: 'crypto' },
+  { value: 'SOL/USDT', label: 'SOL/USDT', market: '加密货币', apiMarket: 'crypto' },
+  { value: '贵州茅台', label: '贵州茅台 (600519)', market: 'A股', apiMarket: 'a_stock' },
+  { value: '宁德时代', label: '宁德时代 (300750)', market: 'A股', apiMarket: 'a_stock' },
+  { value: 'AAPL', label: 'AAPL', market: '美股', apiMarket: 'us_stock' },
+  { value: 'TSLA', label: 'TSLA', market: '美股', apiMarket: 'us_stock' },
+  { value: 'NVDA', label: 'NVDA', market: '美股', apiMarket: 'us_stock' },
 ]
 
 const timeframes = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
@@ -40,7 +41,6 @@ const timeframeBarCounts: Record<Timeframe, number> = {
 }
 
 function generateCandles(symbol: string, tf: Timeframe): CandlestickData<Time>[] {
-  // Use symbol+tf as seed for deterministic but varied data
   let seed = 0
   for (const c of symbol + tf) seed = ((seed << 5) - seed + c.charCodeAt(0)) | 0
   const random = () => {
@@ -94,16 +94,35 @@ function generateCandles(symbol: string, tf: Timeframe): CandlestickData<Time>[]
   return candles
 }
 
+function apiBarsToCandles(bars: { open: number; high: number; low: number; close: number; timestamp: string }[]): CandlestickData<Time>[] {
+  return bars.map((b) => ({
+    time: b.timestamp.split('T')[0] as Time,
+    open: b.open,
+    high: b.high,
+    low: b.low,
+    close: b.close,
+  }))
+}
+
 function Market() {
   const [symbol, setSymbol] = useState('BTC/USDT')
   const [timeframe, setTimeframe] = useState<Timeframe>('1d')
 
-  const candleData = useMemo(
-    () => generateCandles(symbol, timeframe),
-    [symbol, timeframe],
-  )
-
   const selectedSymbol = symbols.find((s) => s.value === symbol)
+
+  const barsQuery = useMarketBars({
+    symbol,
+    market: selectedSymbol?.apiMarket ?? 'crypto',
+    timeframe,
+    limit: timeframeBarCounts[timeframe],
+  })
+
+  const candleData = useMemo(() => {
+    if (barsQuery.data && barsQuery.data.length > 0) {
+      return apiBarsToCandles(barsQuery.data)
+    }
+    return generateCandles(symbol, timeframe)
+  }, [barsQuery.data, symbol, timeframe])
 
   return (
     <div className="space-y-6">
