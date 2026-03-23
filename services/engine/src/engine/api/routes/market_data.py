@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from engine.api.deps import get_duckdb_store
 from engine.api.schemas.market import (
@@ -11,6 +11,8 @@ from engine.api.schemas.market import (
     MarketStatus,
     SymbolInfo,
 )
+from engine.api.schemas.regime import RegimeResponse
+from engine.core.regime_detector import RegimeDetector
 from engine.storage.duckdb_store import DuckDBStore
 
 router = APIRouter()
@@ -190,4 +192,32 @@ async def market_data_status(
         markets=markets,
         total_bars=grand_total,
         duckdb_size_mb=size_mb,
+    )
+
+
+@router.get("/regime", response_model=RegimeResponse)
+async def detect_regime(
+    symbol: str = Query(..., description="Trading pair symbol, e.g. BTC/USDT"),
+    market: str = Query("crypto", description="Market type"),
+    timeframe: str = Query("1d", description="Bar timeframe"),
+    duckdb_store: DuckDBStore = Depends(get_duckdb_store),
+):
+    """Detect the current market regime for a symbol."""
+    df = duckdb_store.query_bars(symbol=symbol, market=market, timeframe=timeframe)
+    if df.empty or len(df) < 60:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient data for regime detection (need >= 60 bars, got {len(df)})",
+        )
+
+    detector = RegimeDetector()
+    regime = detector.detect(df)
+
+    from engine.core.adaptive_engine import _REGIME_DESCRIPTIONS
+
+    return RegimeResponse(
+        symbol=symbol,
+        regime=regime.value,
+        confidence=1.0,
+        reason=_REGIME_DESCRIPTIONS.get(regime, ""),
     )

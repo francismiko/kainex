@@ -1,14 +1,17 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from engine.api.deps import get_sqlite_store, get_strategy_registry
+from engine.api.deps import get_duckdb_store, get_sqlite_store, get_strategy_registry
+from engine.api.schemas.regime import FullAnalysisResponse, StrategyRecommendResponse
 from engine.api.schemas.strategy import (
     StrategyCreate,
     StrategyDetail,
     StrategyListItem,
     StrategyUpdate,
 )
+from engine.core.adaptive_engine import AdaptiveEngine
+from engine.storage.duckdb_store import DuckDBStore
 from engine.storage.sqlite_store import SQLiteStore
 from engine.strategies.registry import StrategyRegistry
 
@@ -47,6 +50,60 @@ async def list_strategies(
 ):
     rows = await store.list_strategy_configs()
     return [_row_to_list_item(r) for r in rows]
+
+
+@router.get("/recommend", response_model=StrategyRecommendResponse)
+async def recommend_strategies(
+    symbol: str = Query(..., description="Trading pair symbol, e.g. BTC/USDT"),
+    market: str = Query("crypto", description="Market type"),
+    timeframe: str = Query("1d", description="Bar timeframe"),
+    use_ml: bool = Query(False, description="Use ML-based regime detection"),
+    duckdb_store: DuckDBStore = Depends(get_duckdb_store),
+    registry: StrategyRegistry = Depends(get_strategy_registry),
+):
+    """Return recommended strategies for the current market regime."""
+    df = duckdb_store.query_bars(symbol=symbol, market=market, timeframe=timeframe)
+    if df.empty or len(df) < 60:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient data for regime detection (need >= 60 bars, got {len(df)})",
+        )
+
+    available = registry.list_strategies()
+    engine = AdaptiveEngine()
+    result = await engine.analyze_and_recommend(
+        symbol=symbol,
+        data=df,
+        available_strategies=available,
+        use_ml=use_ml,
+    )
+    return StrategyRecommendResponse(**result)
+
+
+@router.get("/recommend/full", response_model=FullAnalysisResponse)
+async def full_analysis(
+    symbol: str = Query(..., description="Trading pair symbol, e.g. BTC/USDT"),
+    market: str = Query("crypto", description="Market type"),
+    timeframe: str = Query("1d", description="Bar timeframe"),
+    duckdb_store: DuckDBStore = Depends(get_duckdb_store),
+    registry: StrategyRegistry = Depends(get_strategy_registry),
+):
+    """Run both rule-based and ML regime detection and return combined results."""
+    df = duckdb_store.query_bars(symbol=symbol, market=market, timeframe=timeframe)
+    if df.empty or len(df) < 60:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient data for regime detection (need >= 60 bars, got {len(df)})",
+        )
+
+    available = registry.list_strategies()
+    engine = AdaptiveEngine()
+    result = await engine.full_analysis(
+        symbol=symbol,
+        data=df,
+        available_strategies=available,
+    )
+    return FullAnalysisResponse(**result)
 
 
 @router.get("/{strategy_id}", response_model=StrategyDetail)
