@@ -82,7 +82,7 @@ just setup
 just dev
 ```
 
-The frontend will be available at `http://localhost:5173` and the engine API at `http://localhost:8000`.
+The frontend will be available at `http://localhost:5173` and the engine API at `http://localhost:8001`.
 
 ### Available Commands
 

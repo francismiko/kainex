@@ -8,9 +8,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { PnlChart } from '@/components/charts/pnl-chart'
-import { DrawdownChart } from '@/components/charts/drawdown-chart'
-import { MonthlyHeatmap } from '@/components/charts/monthly-heatmap'
+import { PnlChart } from '@/components/charts/pnl-chart.lazy'
+import { DrawdownChart } from '@/components/charts/drawdown-chart.lazy'
+import { MonthlyHeatmap } from '@/components/charts/monthly-heatmap.lazy'
 import { formatPercent, formatNumber, formatCurrency } from '@/lib/format'
 import type { BacktestResult } from '@/types/strategy'
 

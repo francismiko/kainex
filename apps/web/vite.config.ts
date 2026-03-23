@@ -11,4 +11,30 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 1200,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'echarts',
+              test: /echarts/,
+              priority: 3,
+            },
+            {
+              name: 'lightweight-charts',
+              test: /lightweight-charts/,
+              priority: 3,
+            },
+            {
+              name: 'vendor',
+              test: /node_modules/,
+              priority: 1,
+            },
+          ],
+        },
+      },
+    },
+  },
 })

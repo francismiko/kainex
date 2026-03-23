@@ -5,7 +5,7 @@ let refCount = 0
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io('http://localhost:8000', {
+    socket = io(import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000', {
       autoConnect: false,
       transports: ['websocket'],
     })

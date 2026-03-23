@@ -23,7 +23,7 @@ collector:
 
 # Start engine API server
 engine:
-  cd services/engine && uv run uvicorn engine.api.main:app --reload --host 0.0.0.0 --port 8000
+  cd services/engine && uv run uvicorn engine.api.main:app --reload --host 0.0.0.0 --port 8001
 
 # ─── Build ─────────────────────────────────────────────────────
 

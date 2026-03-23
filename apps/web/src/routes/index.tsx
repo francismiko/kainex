@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { PnlChart } from '@/components/charts/pnl-chart'
+import { PnlChart } from '@/components/charts/pnl-chart.lazy'
 import {
   Table,
   TableBody,

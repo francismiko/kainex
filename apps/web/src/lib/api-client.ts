@@ -2,7 +2,7 @@ import type { Strategy } from '@/types/strategy'
 import type { Portfolio, Position, Trade } from '@/types/portfolio'
 import type { Bar } from '@/types/market'
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8001'
 
 export async function apiFetch<T>(
   path: string,
