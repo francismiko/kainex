@@ -6,8 +6,19 @@ default:
 
 # ─── Development ───────────────────────────────────────────────
 
-# Start all services for development
+# Start all services for development (with portless semantic URLs)
 dev:
+  @echo "Starting Kainex services..."
+  @echo "  Web:       http://kainex.localhost:1355"
+  @echo "  Engine:    http://api.kainex.localhost:1355"
+  @echo "  Collector: running in background"
+  just collector &
+  portless kainex -- pnpm --filter @kainex/web dev &
+  portless api.kainex -- cd services/engine && uv run uvicorn engine.api.main:app --reload --host 0.0.0.0 &
+  wait
+
+# Start without portless (plain ports)
+dev-plain:
   just web &
   just collector &
   just engine &
@@ -24,6 +35,10 @@ collector:
 # Start engine API server
 engine:
   cd services/engine && uv run uvicorn engine.api.main:app --reload --host 0.0.0.0 --port 8001
+
+# Start portless proxy (run once, keeps running)
+proxy:
+  portless proxy start
 
 # ─── Build ─────────────────────────────────────────────────────
 
@@ -61,4 +76,6 @@ seed:
 setup:
   pnpm install
   just py-install
-  @echo "Kainex is ready. Run 'just dev' to start."
+  @echo "Kainex is ready."
+  @echo "  Run 'just proxy' to start portless proxy (once)"
+  @echo "  Run 'just dev' to start all services"

@@ -354,20 +354,59 @@ class TestMarketData:
 # --------------- WebSocket ---------------
 
 class TestWebSocket:
-    def test_subscribe(self):
+    def test_subscribe_action(self):
+        """New action-based subscribe format."""
+        with client.websocket_connect("/api/ws/stream") as ws:
+            ws.send_text('{"action": "subscribe", "channel": "market:BTC/USDT:1m"}')
+            data = ws.receive_json()
+            assert data["status"] == "subscribed"
+            assert data["channel"] == "market:BTC/USDT:1m"
+
+    def test_unsubscribe_action(self):
+        """New action-based unsubscribe format."""
+        with client.websocket_connect("/api/ws/stream") as ws:
+            ws.send_text('{"action": "subscribe", "channel": "market:BTC/USDT:1m"}')
+            ws.receive_json()
+            ws.send_text('{"action": "unsubscribe", "channel": "market:BTC/USDT:1m"}')
+            data = ws.receive_json()
+            assert data["status"] == "unsubscribed"
+
+    def test_subscribe_legacy(self):
+        """Backward-compatible legacy subscribe format."""
         with client.websocket_connect("/api/ws/stream") as ws:
             ws.send_text('{"subscribe": "market:BTC/USDT:1m"}')
             data = ws.receive_json()
             assert data["status"] == "subscribed"
             assert data["channel"] == "market:BTC/USDT:1m"
 
-    def test_unsubscribe(self):
+    def test_unsubscribe_legacy(self):
+        """Backward-compatible legacy unsubscribe format."""
         with client.websocket_connect("/api/ws/stream") as ws:
             ws.send_text('{"subscribe": "market:BTC/USDT:1m"}')
             ws.receive_json()
             ws.send_text('{"unsubscribe": "market:BTC/USDT:1m"}')
             data = ws.receive_json()
             assert data["status"] == "unsubscribed"
+
+    def test_subscribe_signals_channel(self):
+        with client.websocket_connect("/api/ws/stream") as ws:
+            ws.send_text('{"action": "subscribe", "channel": "signals:my-strategy"}')
+            data = ws.receive_json()
+            assert data["status"] == "subscribed"
+            assert data["channel"] == "signals:my-strategy"
+
+    def test_subscribe_portfolio_channel(self):
+        with client.websocket_connect("/api/ws/stream") as ws:
+            ws.send_text('{"action": "subscribe", "channel": "portfolio"}')
+            data = ws.receive_json()
+            assert data["status"] == "subscribed"
+            assert data["channel"] == "portfolio"
+
+    def test_subscribe_invalid_channel(self):
+        with client.websocket_connect("/api/ws/stream") as ws:
+            ws.send_text('{"action": "subscribe", "channel": "invalid:too:many:parts"}')
+            data = ws.receive_json()
+            assert "error" in data
 
     def test_invalid_json(self):
         with client.websocket_connect("/api/ws/stream") as ws:

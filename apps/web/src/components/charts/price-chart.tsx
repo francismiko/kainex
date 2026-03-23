@@ -3,6 +3,8 @@ import { createChart, CandlestickSeries, type IChartApi, type ISeriesApi, type C
 
 interface PriceChartProps {
   data: CandlestickData<Time>[]
+  /** Optional real-time bar to append/update via series.update() */
+  realtimeBar?: CandlestickData<Time> | null
   height?: number
 }
 
@@ -11,7 +13,7 @@ function getCSSColor(varName: string, fallback: string): string {
   return value || fallback
 }
 
-export function PriceChart({ data, height = 400 }: PriceChartProps) {
+export function PriceChart({ data, realtimeBar, height = 400 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -82,6 +84,12 @@ export function PriceChart({ data, height = 400 }: PriceChartProps) {
     seriesRef.current.setData(data)
     chartRef.current?.timeScale().fitContent()
   }, [data])
+
+  // Real-time bar update (append or update the last bar)
+  useEffect(() => {
+    if (!seriesRef.current || !realtimeBar) return
+    seriesRef.current.update(realtimeBar)
+  }, [realtimeBar])
 
   return <div ref={containerRef} />
 }

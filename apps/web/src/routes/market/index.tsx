@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select'
 import { PriceChart } from '@/components/charts/price-chart'
 import { useMarketBars } from '@/hooks/use-api'
+import { useMarketStream, barToCandlestick } from '@/hooks/use-websocket'
 import type { CandlestickData, Time } from 'lightweight-charts'
 
 export const Route = createFileRoute('/market/')({
@@ -124,9 +125,42 @@ function Market() {
     return generateCandles(symbol, timeframe)
   }, [barsQuery.data, symbol, timeframe])
 
+  // Real-time WebSocket stream for the selected symbol + timeframe
+  const { latestBar, status: wsStatus } = useMarketStream(symbol, timeframe)
+
+  // Convert the latest WebSocket bar to a CandlestickData for the chart
+  const realtimeCandle = useMemo<CandlestickData<Time> | null>(() => {
+    if (!latestBar) return null
+    const converted = barToCandlestick(latestBar)
+    return {
+      ...converted,
+      time: converted.time as Time,
+    }
+  }, [latestBar])
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">行情中心</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">行情中心</h1>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span
+            className={`inline-block h-2 w-2 rounded-full ${
+              wsStatus === 'connected'
+                ? 'bg-green-500'
+                : wsStatus === 'connecting'
+                  ? 'bg-yellow-500 animate-pulse'
+                  : 'bg-gray-400'
+            }`}
+          />
+          <span>
+            {wsStatus === 'connected'
+              ? '实时连接'
+              : wsStatus === 'connecting'
+                ? '连接中...'
+                : '离线'}
+          </span>
+        </div>
+      </div>
 
       <Card>
         <CardHeader>
@@ -148,6 +182,11 @@ function Market() {
               <CardTitle className="text-lg">
                 {selectedSymbol?.label ?? symbol}
               </CardTitle>
+              {latestBar && (
+                <span className="text-sm font-mono text-muted-foreground">
+                  {latestBar.close.toFixed(2)}
+                </span>
+              )}
             </div>
 
             <Tabs value={timeframe} onValueChange={(v: string) => setTimeframe(v as Timeframe)}>
@@ -162,7 +201,7 @@ function Market() {
           </div>
         </CardHeader>
         <CardContent>
-          <PriceChart data={candleData} height={500} />
+          <PriceChart data={candleData} realtimeBar={realtimeCandle} height={500} />
         </CardContent>
       </Card>
     </div>

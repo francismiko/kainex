@@ -4,7 +4,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
-import type { BacktestResult } from '@/types/strategy'
+import type { StrategyCreateInput, BacktestResult } from '@/types/strategy'
 
 export function useStrategies() {
   return useQuery({
@@ -17,6 +17,22 @@ export function useStrategy(id: string) {
   return useQuery({
     queryKey: ['strategies', id],
     queryFn: () => api.strategies.get(id),
+  })
+}
+
+export function useCreateStrategy() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: StrategyCreateInput) => api.strategies.create(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['strategies'] }),
+  })
+}
+
+export function useDeleteStrategy() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.strategies.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['strategies'] }),
   })
 }
 
@@ -76,6 +92,8 @@ export function useRunBacktest() {
       start_date: string
       end_date: string
       initial_capital: number
+      market?: string
+      symbols?: string[]
     }) => api.backtest.run(params) as Promise<BacktestResult>,
   })
 }

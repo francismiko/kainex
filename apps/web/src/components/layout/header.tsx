@@ -1,7 +1,7 @@
 import { Moon, Sun, Search, Wifi, WifiOff } from 'lucide-react'
 import { useRouterState, Link } from '@tanstack/react-router'
 import { useUIStore } from '@/stores/ui-store'
-import { useWebSocketStatus } from '@/hooks/use-websocket'
+import { useConnectionStatus } from '@/hooks/use-websocket'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -20,7 +20,8 @@ export function Header() {
   const toggleTheme = useUIStore((s) => s.toggleTheme)
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
-  const wsConnected = useWebSocketStatus()
+  const wsStatus = useConnectionStatus()
+  const wsConnected = wsStatus === 'connected'
 
   // Build breadcrumb
   const segments = pathname === '/' ? ['/'] : pathname.replace(/\/$/, '').split('/').filter(Boolean)

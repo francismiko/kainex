@@ -1,4 +1,4 @@
-import type { Strategy } from '@/types/strategy'
+import type { Strategy, StrategyCreateInput, BacktestResult } from '@/types/strategy'
 import type { Portfolio, Position, Trade } from '@/types/portfolio'
 import type { Bar } from '@/types/market'
 
@@ -13,31 +13,113 @@ export async function apiFetch<T>(
     ...options,
   })
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`)
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `API error: ${res.status} ${res.statusText}`)
   }
   return res.json() as Promise<T>
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function mapStrategy(raw: any): Strategy {
+  return {
+    id: raw.id,
+    name: raw.name,
+    class_name: raw.class_name ?? '',
+    description: raw.description ?? '',
+    status: raw.status ?? 'stopped',
+    market: (raw.markets ?? [])[0] ?? '',
+    markets: raw.markets ?? [],
+    symbols: raw.symbols ?? [],
+    timeframes: raw.timeframes ?? [],
+    parameters: raw.parameters ?? {},
+    pnl: raw.performance?.total_return ?? raw.pnl ?? 0,
+    createdAt: raw.created_at ?? '',
+    updatedAt: raw.updated_at ?? '',
+  }
+}
+
+function mapBacktestResult(raw: any): BacktestResult {
+  const equityCurve = (raw.equity_curve ?? []).map((v: any, i: number) => {
+    if (typeof v === 'number') return { time: String(i), value: v }
+    return { time: v.time ?? String(i), value: v.value ?? v }
+  })
+  const trades = (raw.trades ?? []).map((t: any) => ({
+    id: t.id ?? `${t.entry_time}-${t.symbol}`,
+    entry_time: t.entry_time ?? '',
+    exit_time: t.exit_time ?? undefined,
+    symbol: t.symbol ?? '',
+    side: t.side ?? 'buy',
+    entry_price: t.entry_price ?? 0,
+    exit_price: t.exit_price ?? undefined,
+    price: t.entry_price ?? t.price ?? 0,
+    quantity: t.quantity ?? 0,
+    pnl: t.pnl ?? 0,
+    timestamp: t.entry_time ?? t.timestamp ?? '',
+  }))
+  const m = raw.metrics ?? {}
+  return {
+    id: raw.id,
+    strategy_id: raw.strategy_id,
+    status: raw.status,
+    equity_curve: equityCurve,
+    trades,
+    metrics: {
+      sharpe: m.sharpe_ratio ?? m.sharpe ?? 0,
+      sortino: m.sortino_ratio ?? m.sortino ?? 0,
+      max_drawdown: m.max_drawdown ?? 0,
+      win_rate: m.win_rate ?? 0,
+      profit_factor: m.profit_factor ?? 0,
+      annual_return: m.annual_return ?? 0,
+      total_return: m.total_return ?? 0,
+      trade_count: m.trade_count ?? trades.length,
+    },
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const api = {
   strategies: {
-    list: () => apiFetch<Strategy[]>('/api/strategies'),
-    get: (id: string) => apiFetch<Strategy>(`/api/strategies/${id}`),
-    create: (data: unknown) =>
-      apiFetch<Strategy>('/api/strategies', {
+    list: async () => {
+      const raw = await apiFetch<unknown[]>('/api/strategies')
+      return raw.map(mapStrategy)
+    },
+    get: async (id: string) => {
+      const raw = await apiFetch<unknown>(`/api/strategies/${id}`)
+      return mapStrategy(raw)
+    },
+    create: async (data: StrategyCreateInput) => {
+      const raw = await apiFetch<unknown>('/api/strategies', {
         method: 'POST',
         body: JSON.stringify(data),
-      }),
-    start: (id: string) =>
-      apiFetch<void>(`/api/strategies/${id}/start`, { method: 'POST' }),
-    stop: (id: string) =>
-      apiFetch<void>(`/api/strategies/${id}/stop`, { method: 'POST' }),
+      })
+      return mapStrategy(raw)
+    },
+    delete: (id: string) =>
+      apiFetch<void>(`/api/strategies/${id}`, { method: 'DELETE' }),
+    start: async (id: string) => {
+      const raw = await apiFetch<unknown>(`/api/strategies/${id}/start`, { method: 'POST' })
+      return mapStrategy(raw)
+    },
+    stop: async (id: string) => {
+      const raw = await apiFetch<unknown>(`/api/strategies/${id}/stop`, { method: 'POST' })
+      return mapStrategy(raw)
+    },
   },
   backtest: {
-    run: (data: unknown) =>
-      apiFetch<unknown>('/api/backtest/run', {
+    run: async (data: {
+      strategy_id: string
+      start_date: string
+      end_date: string
+      initial_capital: number
+      market?: string
+      symbols?: string[]
+    }) => {
+      const raw = await apiFetch<unknown>('/api/backtest/run', {
         method: 'POST',
         body: JSON.stringify(data),
-      }),
+      })
+      return mapBacktestResult(raw)
+    },
     results: () => apiFetch<unknown[]>('/api/backtest/results'),
     result: (id: string) => apiFetch<unknown>(`/api/backtest/results/${id}`),
   },

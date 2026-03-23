@@ -1,42 +1,196 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react'
-import { type Socket } from 'socket.io-client'
-import { acquireSocket, releaseSocket, getSocket, getConnectionState } from '@/lib/websocket'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  acquire,
+  release,
+  subscribe,
+  unsubscribe,
+  addMessageHandler,
+  subscribeToState,
+  getConnectionState,
+  type ConnectionState,
+} from '@/lib/websocket'
 
-export function useWebSocket(
-  event: string,
-  handler: (data: unknown) => void,
-): Socket {
-  const handlerRef = useRef(handler)
-  handlerRef.current = handler
+// --------------- Connection status ---------------
 
-  const socketRef = useRef<Socket | null>(null)
+/**
+ * Returns the current WebSocket connection state: 'connecting' | 'connected' | 'disconnected'.
+ */
+export function useConnectionStatus(): ConnectionState {
+  return useSyncExternalStore(subscribeToState, getConnectionState)
+}
+
+// --------------- Generic channel hook ---------------
+
+/**
+ * Low-level hook: subscribe to a channel, receive the latest message data.
+ * Manages acquire/release and subscribe/unsubscribe lifecycle.
+ */
+function useChannel<T>(channel: string | null): T | null {
+  const [data, setData] = useState<T | null>(null)
+  const channelRef = useRef(channel)
 
   useEffect(() => {
-    const socket = acquireSocket()
-    socketRef.current = socket
+    channelRef.current = channel
+    if (!channel) return
 
-    const stableHandler = (data: unknown) => handlerRef.current(data)
-    socket.on(event, stableHandler)
+    acquire()
+    subscribe(channel)
+
+    const removeHandler = addMessageHandler((ch, payload) => {
+      if (ch === channelRef.current) {
+        setData(payload as T)
+      }
+    })
 
     return () => {
-      socket.off(event, stableHandler)
-      releaseSocket()
+      removeHandler()
+      unsubscribe(channel)
+      release()
+      setData(null)
     }
-  }, [event])
+  }, [channel])
 
-  return socketRef.current ?? getSocket()
+  return data
 }
 
-function subscribeToConnection(callback: () => void): () => void {
-  const socket = getSocket()
-  socket.on('connect', callback)
-  socket.on('disconnect', callback)
-  return () => {
-    socket.off('connect', callback)
-    socket.off('disconnect', callback)
+// --------------- Market stream ---------------
+
+export interface MarketBar {
+  symbol: string
+  timeframe: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  timestamp: number
+}
+
+export interface MarketStreamResult {
+  /** Latest bar received from the WebSocket */
+  latestBar: MarketBar | null
+  /** Connection state */
+  status: ConnectionState
+}
+
+/**
+ * Subscribe to real-time market data for a symbol + timeframe.
+ * Channel format: `market:{symbol}:{timeframe}`
+ */
+export function useMarketStream(
+  symbol: string | null,
+  timeframe: string | null,
+): MarketStreamResult {
+  const channel =
+    symbol && timeframe ? `market:${symbol}:${timeframe}` : null
+  const latestBar = useChannel<MarketBar>(channel)
+  const status = useConnectionStatus()
+  return { latestBar, status }
+}
+
+// --------------- Signal stream ---------------
+
+export interface StrategySignal {
+  strategy_id: string
+  symbol: string
+  direction: 'long' | 'short' | 'close'
+  price: number
+  quantity: number
+  timestamp: number
+}
+
+export interface SignalStreamResult {
+  /** Latest signal received from the WebSocket */
+  latestSignal: StrategySignal | null
+  /** All signals accumulated during this subscription */
+  signals: StrategySignal[]
+  /** Connection state */
+  status: ConnectionState
+}
+
+/**
+ * Subscribe to strategy signals.
+ * Channel format: `signals:{strategy_id}`
+ */
+export function useSignalStream(strategyId: string | null): SignalStreamResult {
+  const channel = strategyId ? `signals:${strategyId}` : null
+  const [signals, setSignals] = useState<StrategySignal[]>([])
+  const [latestSignal, setLatestSignal] = useState<StrategySignal | null>(null)
+  const channelRef = useRef(channel)
+  const status = useConnectionStatus()
+
+  useEffect(() => {
+    channelRef.current = channel
+    if (!channel) return
+
+    acquire()
+    subscribe(channel)
+    setSignals([])
+    setLatestSignal(null)
+
+    const removeHandler = addMessageHandler((ch, payload) => {
+      if (ch === channelRef.current) {
+        const sig = payload as StrategySignal
+        setLatestSignal(sig)
+        setSignals((prev) => [...prev.slice(-99), sig])
+      }
+    })
+
+    return () => {
+      removeHandler()
+      unsubscribe(channel)
+      release()
+    }
+  }, [channel])
+
+  return { latestSignal, signals, status }
+}
+
+// --------------- Portfolio stream ---------------
+
+export interface PortfolioSnapshot {
+  total_value: number
+  cash: number
+  daily_pnl: number
+  total_pnl: number
+  positions_count: number
+  timestamp: number
+}
+
+export interface PortfolioStreamResult {
+  /** Latest portfolio snapshot from the WebSocket */
+  portfolio: PortfolioSnapshot | null
+  /** Connection state */
+  status: ConnectionState
+}
+
+/**
+ * Subscribe to real-time portfolio updates.
+ * Channel: `portfolio`
+ */
+export function usePortfolioStream(): PortfolioStreamResult {
+  const portfolio = useChannel<PortfolioSnapshot>('portfolio')
+  const status = useConnectionStatus()
+  return { portfolio, status }
+}
+
+// --------------- Helper: convert WebSocket bar to lightweight-charts candlestick ---------------
+
+/**
+ * Convert a MarketBar from the WebSocket into a lightweight-charts CandlestickData-like object.
+ */
+export function barToCandlestick(bar: MarketBar): {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+} {
+  return {
+    time: bar.timestamp,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
   }
-}
-
-export function useWebSocketStatus(): boolean {
-  return useSyncExternalStore(subscribeToConnection, getConnectionState)
 }
