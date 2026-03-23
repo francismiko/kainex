@@ -4,7 +4,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
-import type { StrategyCreateInput, BacktestResult } from '@/types/strategy'
+import type { StrategyCreateInput, BacktestResult, OptimizeResponse } from '@/types/strategy'
 
 export function useStrategies() {
   return useQuery({
@@ -118,5 +118,20 @@ export function useBacktestResult(id: string) {
     queryKey: ['backtest', 'results', id],
     queryFn: () => api.backtest.result(id),
     enabled: !!id,
+  })
+}
+
+export function useOptimize() {
+  return useMutation({
+    mutationFn: (params: {
+      strategy_id: string
+      param_grid: Record<string, number[]>
+      start_date: string
+      end_date: string
+      initial_capital: number
+      market?: string
+      symbols?: string[]
+      metric?: string
+    }) => api.backtest.optimize(params) as Promise<OptimizeResponse>,
   })
 }

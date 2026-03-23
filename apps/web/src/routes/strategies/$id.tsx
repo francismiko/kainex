@@ -10,6 +10,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
 import { EmptyState } from '@/components/shared/empty-state'
 import {
@@ -19,6 +26,7 @@ import {
   useDeleteStrategy,
   useRunBacktest,
   useBacktestResults,
+  useOptimize,
 } from '@/hooks/use-api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,10 +40,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { BacktestPanel } from '@/components/strategy/backtest-panel'
+import { OptimizeResultPanel } from '@/components/strategy/optimize-result-panel'
 import { toast } from 'sonner'
-import { AlertTriangle, ChevronDown, ChevronRight, History, Loader2, Play, Square, Trash2 } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, History, Loader2, Play, Settings2, Square, Trash2 } from 'lucide-react'
 import { formatPercent, formatNumber, formatDateTime } from '@/lib/format'
-import type { BacktestResult } from '@/types/strategy'
+import type { BacktestResult, OptimizeResponse } from '@/types/strategy'
 
 export const Route = createFileRoute('/strategies/$id')({
   component: StrategyDetail,
@@ -56,6 +65,43 @@ const MARKET_LABELS: Record<string, string> = {
   us_stock: '美股',
 }
 
+/** Known tunable parameters per strategy type (excludes non-numeric like ma_type). */
+const STRATEGY_PARAM_DEFS: Record<string, { key: string; label: string; defaultRange: string }[]> = {
+  sma_crossover: [
+    { key: 'short_window', label: '短期窗口', defaultRange: '5,10,15,20' },
+    { key: 'long_window', label: '长期窗口', defaultRange: '20,30,40,50,60' },
+  ],
+  rsi_mean_reversion: [
+    { key: 'rsi_period', label: 'RSI 周期', defaultRange: '7,10,14,21' },
+    { key: 'oversold', label: '超卖阈值', defaultRange: '20,25,30,35' },
+    { key: 'overbought', label: '超买阈值', defaultRange: '65,70,75,80' },
+  ],
+  bollinger_breakout: [
+    { key: 'bb_period', label: '布林带周期', defaultRange: '10,15,20,25,30' },
+    { key: 'bb_std', label: '标准差倍数', defaultRange: '1.5,2,2.5,3' },
+  ],
+  macd_crossover: [
+    { key: 'fast_period', label: '快线周期', defaultRange: '8,10,12,15' },
+    { key: 'slow_period', label: '慢线周期', defaultRange: '20,24,26,30' },
+    { key: 'signal_period', label: '信号线周期', defaultRange: '7,9,11' },
+  ],
+  momentum: [
+    { key: 'lookback', label: '回望周期', defaultRange: '10,15,20,25,30' },
+    { key: 'threshold', label: '阈值', defaultRange: '0.01,0.02,0.03,0.05' },
+  ],
+  dual_ma: [
+    { key: 'fast_period', label: '快线周期', defaultRange: '5,10,15,20' },
+    { key: 'slow_period', label: '慢线周期', defaultRange: '20,30,40,50,60' },
+  ],
+}
+
+const OPTIMIZE_METRICS = [
+  { value: 'sharpe_ratio', label: '夏普比率' },
+  { value: 'total_return', label: '总收益' },
+  { value: 'win_rate', label: '胜率' },
+  { value: 'max_drawdown', label: '最大回撤' },
+]
+
 function StrategyDetail() {
   const { id } = Route.useParams()
   const navigate = useNavigate()
@@ -64,6 +110,7 @@ function StrategyDetail() {
   const stopMutation = useStopStrategy()
   const deleteMutation = useDeleteStrategy()
   const backtestMutation = useRunBacktest()
+  const optimizeMutation = useOptimize()
   const { data: allBacktestResults } = useBacktestResults()
 
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null)
@@ -74,6 +121,22 @@ function StrategyDetail() {
   const [initialCapital, setInitialCapital] = useState('100000')
   const [backtestEmpty, setBacktestEmpty] = useState(false)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+
+  // Optimize state
+  const [optimizeDialogOpen, setOptimizeDialogOpen] = useState(false)
+  const [optimizeResult, setOptimizeResult] = useState<OptimizeResponse | null>(null)
+  const [optimizeMetric, setOptimizeMetric] = useState('sharpe_ratio')
+  const [optimizeStartDate, setOptimizeStartDate] = useState('2025-01-01')
+  const [optimizeEndDate, setOptimizeEndDate] = useState('2026-01-01')
+  const [optimizeCapital, setOptimizeCapital] = useState('100000')
+
+  // Parameter grid state: key => comma-separated values string
+  const paramDefs = strategy ? STRATEGY_PARAM_DEFS[strategy.class_name] ?? [] : []
+  const [paramGridValues, setParamGridValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    // Will be populated when dialog opens
+    return initial
+  })
 
   // Filter backtest history for current strategy
   const backtestHistory = (allBacktestResults ?? []).filter(
@@ -113,6 +176,72 @@ function StrategyDetail() {
         },
         onError: (err) => {
           toast.error(`回测失败: ${err.message}`)
+        },
+      },
+    )
+  }
+
+  function handleOpenOptimize() {
+    // Initialize param grid values from defaults when opening dialog
+    const initial: Record<string, string> = {}
+    for (const def of paramDefs) {
+      initial[def.key] = paramGridValues[def.key] ?? def.defaultRange
+    }
+    setParamGridValues(initial)
+    setOptimizeDialogOpen(true)
+  }
+
+  function handleRunOptimize() {
+    const market = strategy?.markets?.[0] ?? strategy?.market ?? 'crypto'
+    const symbols = strategy?.parameters?.symbol
+      ? [String(strategy.parameters.symbol)]
+      : strategy?.symbols?.length
+        ? strategy.symbols
+        : ['BTC/USDT']
+
+    // Parse param grid: convert comma-separated strings to number arrays
+    const paramGrid: Record<string, number[]> = {}
+    let totalCombinations = 1
+    for (const def of paramDefs) {
+      const raw = paramGridValues[def.key] ?? def.defaultRange
+      const values = raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s !== '')
+        .map(Number)
+        .filter((n) => !isNaN(n))
+      if (values.length === 0) {
+        toast.error(`参数「${def.label}」至少需要一个有效数值`)
+        return
+      }
+      paramGrid[def.key] = values
+      totalCombinations *= values.length
+    }
+
+    if (Object.keys(paramGrid).length === 0) {
+      toast.error('没有可优化的参数')
+      return
+    }
+
+    optimizeMutation.mutate(
+      {
+        strategy_id: id,
+        param_grid: paramGrid,
+        start_date: optimizeStartDate,
+        end_date: optimizeEndDate,
+        initial_capital: Number(optimizeCapital),
+        market,
+        symbols,
+        metric: optimizeMetric,
+      },
+      {
+        onSuccess: (data) => {
+          setOptimizeResult(data)
+          setOptimizeDialogOpen(false)
+          toast.success(`优化完成，共测试 ${data.total_combinations} 个组合`)
+        },
+        onError: (err) => {
+          toast.error(`优化失败: ${err.message}`)
         },
       },
     )
@@ -295,58 +424,69 @@ function StrategyDetail() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>回测结果</CardTitle>
-          <Dialog open={backtestDialogOpen} onOpenChange={setBacktestDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">运行回测</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>回测参数</DialogTitle>
-                <DialogDescription>设置回测时间范围和初始资金</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">开始日期</label>
-                  <Input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleOpenOptimize}
+              disabled={paramDefs.length === 0}
+            >
+              <Settings2 className="size-4" />
+              参数优化
+            </Button>
+            <Dialog open={backtestDialogOpen} onOpenChange={setBacktestDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">运行回测</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>回测参数</DialogTitle>
+                  <DialogDescription>设置回测时间范围和初始资金</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">开始日期</label>
+                    <Input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">结束日期</label>
+                    <Input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">初始资金</label>
+                    <Input
+                      type="number"
+                      value={initialCapital}
+                      onChange={(e) => setInitialCapital(e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">结束日期</label>
-                  <Input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">初始资金</label>
-                  <Input
-                    type="number"
-                    value={initialCapital}
-                    onChange={(e) => setInitialCapital(e.target.value)}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setBacktestDialogOpen(false)}
-                  disabled={backtestMutation.isPending}
-                >
-                  取消
-                </Button>
-                <Button
-                  onClick={handleRunBacktest}
-                  disabled={backtestMutation.isPending}
-                >
-                  {backtestMutation.isPending ? '回测中...' : '开始回测'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setBacktestDialogOpen(false)}
+                    disabled={backtestMutation.isPending}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    onClick={handleRunBacktest}
+                    disabled={backtestMutation.isPending}
+                  >
+                    {backtestMutation.isPending ? '回测中...' : '开始回测'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </CardHeader>
         <CardContent>
           {backtestMutation.isPending && (
@@ -372,6 +512,128 @@ function StrategyDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Optimize dialog */}
+      <Dialog open={optimizeDialogOpen} onOpenChange={setOptimizeDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>参数优化</DialogTitle>
+            <DialogDescription>
+              设置参数范围进行网格搜索，找到最优参数组合
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+            {paramDefs.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">参数范围（逗号分隔）</p>
+                {paramDefs.map((def) => (
+                  <div key={def.key} className="space-y-1">
+                    <label className="text-sm text-muted-foreground">{def.label} ({def.key})</label>
+                    <Input
+                      placeholder={def.defaultRange}
+                      value={paramGridValues[def.key] ?? def.defaultRange}
+                      onChange={(e) =>
+                        setParamGridValues((prev) => ({ ...prev, [def.key]: e.target.value }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">开始日期</label>
+                <Input
+                  type="date"
+                  value={optimizeStartDate}
+                  onChange={(e) => setOptimizeStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">结束日期</label>
+                <Input
+                  type="date"
+                  value={optimizeEndDate}
+                  onChange={(e) => setOptimizeEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">初始资金</label>
+              <Input
+                type="number"
+                value={optimizeCapital}
+                onChange={(e) => setOptimizeCapital(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">优化目标指标</label>
+              <Select value={optimizeMetric} onValueChange={setOptimizeMetric}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OPTIMIZE_METRICS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOptimizeDialogOpen(false)}
+              disabled={optimizeMutation.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleRunOptimize}
+              disabled={optimizeMutation.isPending}
+            >
+              {optimizeMutation.isPending
+                ? `正在优化 ${(() => {
+                    let n = 1
+                    for (const def of paramDefs) {
+                      const raw = paramGridValues[def.key] ?? def.defaultRange
+                      n *= raw.split(',').filter((s) => s.trim() !== '').length
+                    }
+                    return n
+                  })()} 个组合...`
+                : '开始优化'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Optimize loading state */}
+      {optimizeMutation.isPending && (
+        <Card>
+          <CardContent className="py-16">
+            <div className="flex flex-col items-center justify-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">
+                正在优化 {(() => {
+                  let n = 1
+                  for (const def of paramDefs) {
+                    const raw = paramGridValues[def.key] ?? def.defaultRange
+                    n *= raw.split(',').filter((s) => s.trim() !== '').length
+                  }
+                  return n
+                })()} 个组合...
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Optimize results */}
+      {optimizeResult && !optimizeMutation.isPending && (
+        <OptimizeResultPanel data={optimizeResult} metric={optimizeMetric} />
+      )}
 
       {/* Backtest history */}
       <Card>

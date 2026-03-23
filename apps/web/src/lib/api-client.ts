@@ -1,4 +1,4 @@
-import type { Strategy, StrategyCreateInput, BacktestResult } from '@/types/strategy'
+import type { Strategy, StrategyCreateInput, BacktestResult, OptimizeResponse } from '@/types/strategy'
 import type { Portfolio, Position, Trade } from '@/types/portfolio'
 import type { Bar } from '@/types/market'
 
@@ -127,6 +127,21 @@ export const api = {
     result: async (id: string) => {
       const raw = await apiFetch<unknown>(`/api/backtest/results/${id}`)
       return mapBacktestResult(raw)
+    },
+    optimize: async (data: {
+      strategy_id: string
+      param_grid: Record<string, number[]>
+      start_date: string
+      end_date: string
+      initial_capital: number
+      market?: string
+      symbols?: string[]
+      metric?: string
+    }) => {
+      return apiFetch<OptimizeResponse>('/api/backtest/optimize', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
     },
   },
   portfolio: {

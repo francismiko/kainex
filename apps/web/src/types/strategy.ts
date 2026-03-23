@@ -69,3 +69,15 @@ export interface BacktestResult {
   trades: BacktestTrade[]
   metrics: BacktestMetrics
 }
+
+export interface OptimizeResultItem {
+  parameters: Record<string, unknown>
+  metrics: BacktestMetrics
+  rank: number
+}
+
+export interface OptimizeResponse {
+  results: OptimizeResultItem[]
+  best_parameters: Record<string, unknown>
+  total_combinations: number
+}
