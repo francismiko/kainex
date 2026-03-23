@@ -1,3 +1,4 @@
+import itertools
 import uuid
 from datetime import datetime, timezone
 
@@ -10,6 +11,9 @@ from engine.api.schemas.backtest import (
     BacktestRequest,
     BacktestResponse,
     BacktestTrade,
+    OptimizeRequest,
+    OptimizeResponse,
+    OptimizeResultItem,
 )
 from engine.core.backtest import BacktestEngine
 from engine.storage.duckdb_store import DuckDBStore
@@ -196,4 +200,87 @@ async def get_backtest_result(
         trades=trades,
         metrics=BacktestMetrics(**row.get("metrics", {})),
         created_at=row["created_at"],
+    )
+
+
+@router.post("/optimize", response_model=OptimizeResponse)
+async def optimize_parameters(
+    req: OptimizeRequest,
+    registry: StrategyRegistry = Depends(get_strategy_registry),
+    sqlite_store: SQLiteStore = Depends(get_sqlite_store),
+    duckdb_store: DuckDBStore = Depends(get_duckdb_store),
+):
+    # Resolve strategy class
+    strategy_class_name = req.strategy_id
+    sqlite_cfg = await sqlite_store.get_strategy_config(req.strategy_id)
+    if sqlite_cfg:
+        strategy_class_name = sqlite_cfg["class_name"]
+
+    try:
+        strategy_cls = registry.get(strategy_class_name)
+    except KeyError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Strategy class '{strategy_class_name}' not registered",
+        )
+
+    # Load historical data
+    symbol = req.symbols[0] if req.symbols else "BTC/USDT"
+    timeframe = "1d"
+    df = duckdb_store.query_bars(
+        symbol=symbol,
+        market=req.market,
+        timeframe=timeframe,
+        start=req.start_date.isoformat() if req.start_date else None,
+        end=req.end_date.isoformat() if req.end_date else None,
+    )
+
+    if df.empty:
+        raise HTTPException(
+            status_code=400,
+            detail="No historical data available for the given parameters",
+        )
+
+    # Build parameter combinations
+    keys = list(req.param_grid.keys())
+    values = list(req.param_grid.values())
+    combos = list(itertools.product(*values))
+    total_combinations = len(combos)
+
+    # Run grid search
+    market = _market_enum(req.market)
+    scored: list[tuple[dict, dict, float]] = []
+    for combo in combos:
+        params = dict(zip(keys, combo))
+        engine = BacktestEngine(initial_capital=req.initial_capital, market=market)
+        strategy_instance = strategy_cls(**params)
+        bt_result = engine.run(
+            strategy=strategy_instance,
+            data=df,
+            start=req.start_date,
+            end=req.end_date,
+        )
+        metrics = bt_result.metrics or {}
+        metric_val = metrics.get(req.metric, 0.0)
+        scored.append((params, metrics, metric_val))
+
+    # Sort by metric descending (higher is better)
+    scored.sort(key=lambda x: x[2], reverse=True)
+
+    results = []
+    for rank, (params, metrics, _) in enumerate(scored, start=1):
+        results.append(
+            OptimizeResultItem(
+                parameters=params,
+                metrics=BacktestMetrics(**metrics) if metrics else BacktestMetrics(),
+                rank=rank,
+            )
+        )
+
+    best_parameters = scored[0][0] if scored else {}
+
+    return OptimizeResponse(
+        results=results,
+        best_parameters=best_parameters,
+        total_combinations=total_combinations,
     )

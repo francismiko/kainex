@@ -50,3 +50,26 @@ class BacktestListItem(BaseModel):
     status: str
     metrics: BacktestMetrics
     created_at: datetime
+
+
+class OptimizeRequest(BaseModel):
+    strategy_id: str
+    param_grid: dict[str, list]
+    start_date: datetime
+    end_date: datetime
+    initial_capital: float = 100_000.0
+    market: str = "crypto"
+    symbols: list[str] = ["BTC/USDT"]
+    metric: str = "sharpe_ratio"
+
+
+class OptimizeResultItem(BaseModel):
+    parameters: dict
+    metrics: BacktestMetrics
+    rank: int
+
+
+class OptimizeResponse(BaseModel):
+    results: list[OptimizeResultItem]
+    best_parameters: dict
+    total_combinations: int

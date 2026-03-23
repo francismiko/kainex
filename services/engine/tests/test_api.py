@@ -221,6 +221,109 @@ class TestBacktest:
         assert resp.status_code == 404
 
 
+# --------------- Optimize ---------------
+
+class TestOptimize:
+    def _make_price_df(self):
+        import numpy as np
+        import pandas as pd
+        dates = pd.date_range("2025-01-01", periods=120, freq="D")
+        np.random.seed(42)
+        prices = 50000 + np.cumsum(np.random.randn(120) * 500)
+        return pd.DataFrame(
+            {
+                "open": prices - 100,
+                "high": prices + 200,
+                "low": prices - 200,
+                "close": prices,
+                "volume": np.random.randint(100, 1000, 120).astype(float),
+                "symbol": "BTC/USDT",
+            },
+            index=dates,
+        )
+
+    def test_optimize_success(self, _mock_stores):
+        mock_sqlite, mock_duckdb = _mock_stores
+        mock_duckdb.query_bars.return_value = self._make_price_df()
+        mock_sqlite.get_strategy_config.return_value = None
+
+        resp = client.post("/api/backtest/optimize", json={
+            "strategy_id": "sma_crossover",
+            "param_grid": {
+                "short_window": [5, 10],
+                "long_window": [20, 30],
+            },
+            "start_date": "2025-01-01T00:00:00Z",
+            "end_date": "2025-04-30T00:00:00Z",
+            "initial_capital": 100000,
+            "market": "crypto",
+            "symbols": ["BTC/USDT"],
+            "metric": "sharpe_ratio",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_combinations"] == 4
+        assert len(data["results"]) == 4
+        assert data["results"][0]["rank"] == 1
+        assert "best_parameters" in data
+        assert "short_window" in data["best_parameters"]
+        assert "long_window" in data["best_parameters"]
+        # Results should be sorted by rank
+        ranks = [r["rank"] for r in data["results"]]
+        assert ranks == [1, 2, 3, 4]
+        # Each result should have full metrics
+        for r in data["results"]:
+            assert "sharpe_ratio" in r["metrics"]
+            assert "total_return" in r["metrics"]
+
+    def test_optimize_no_data(self, _mock_stores):
+        mock_sqlite, mock_duckdb = _mock_stores
+        import pandas as pd
+        mock_duckdb.query_bars.return_value = pd.DataFrame()
+        mock_sqlite.get_strategy_config.return_value = None
+
+        resp = client.post("/api/backtest/optimize", json={
+            "strategy_id": "sma_crossover",
+            "param_grid": {"short_window": [5, 10], "long_window": [20, 30]},
+            "start_date": "2025-01-01T00:00:00Z",
+            "end_date": "2025-04-30T00:00:00Z",
+        })
+        assert resp.status_code == 400
+        assert "No historical data" in resp.json()["detail"]
+
+    def test_optimize_invalid_strategy(self, _mock_stores):
+        mock_sqlite, mock_duckdb = _mock_stores
+        mock_duckdb.query_bars.return_value = self._make_price_df()
+        mock_sqlite.get_strategy_config.return_value = None
+
+        resp = client.post("/api/backtest/optimize", json={
+            "strategy_id": "nonexistent_strategy",
+            "param_grid": {"short_window": [5]},
+            "start_date": "2025-01-01T00:00:00Z",
+            "end_date": "2025-04-30T00:00:00Z",
+        })
+        assert resp.status_code == 400
+        assert "not registered" in resp.json()["detail"]
+
+    def test_optimize_single_combination(self, _mock_stores):
+        mock_sqlite, mock_duckdb = _mock_stores
+        mock_duckdb.query_bars.return_value = self._make_price_df()
+        mock_sqlite.get_strategy_config.return_value = None
+
+        resp = client.post("/api/backtest/optimize", json={
+            "strategy_id": "sma_crossover",
+            "param_grid": {"short_window": [10], "long_window": [30]},
+            "start_date": "2025-01-01T00:00:00Z",
+            "end_date": "2025-04-30T00:00:00Z",
+            "metric": "total_return",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_combinations"] == 1
+        assert len(data["results"]) == 1
+        assert data["best_parameters"] == {"short_window": 10, "long_window": 30}
+
+
 # --------------- Portfolio ---------------
 
 class TestPortfolio:
