@@ -1,0 +1,13 @@
+{
+  "name": "kainex",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source multi-market quantitative trading platform",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "pnpm --filter @kainex/web dev",
+    "build": "pnpm --filter @kainex/web build",
+    "lint": "pnpm --filter @kainex/web lint",
+    "typecheck": "pnpm --filter @kainex/web typecheck"
+  }
+}

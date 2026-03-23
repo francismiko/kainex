@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+.turbo/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
+.uv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+docker/data/
+
+# Testing
+coverage/
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Data files (DuckDB, SQLite, Parquet)
+data/
+*.duckdb
+*.duckdb.wal
+*.parquet
+
+# Misc
+*.log
+.cache/

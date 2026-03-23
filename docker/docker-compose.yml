@@ -1,0 +1,44 @@
+# Kainex infrastructure services
+# NOTE: SQLite is the default storage for development.
+# These services are OPTIONAL — only needed for production or high-throughput scenarios.
+
+services:
+  # Optional: Use TimescaleDB instead of SQLite for production
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: kainex-timescaledb
+    profiles: ["production"]
+    environment:
+      POSTGRES_USER: kainex
+      POSTGRES_PASSWORD: kainex_dev
+      POSTGRES_DB: kainex
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kainex"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Use Redis for production pub/sub and caching
+  redis:
+    image: redis/redis-stack:latest
+    container_name: kainex-redis
+    profiles: ["production"]
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  timescale-data:
+  redis-data:
