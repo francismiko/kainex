@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.kainex.agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/francis/.local/share/mise/shims/uv</string>
+        <string>run</string>
+        <string>python</string>
+        <string>-m</string>
+        <string>agent</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/francis/Project/kainex/services/agent</string>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/francis/Project/kainex/data/logs/agent.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/francis/Project/kainex/data/logs/agent.stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/francis/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>
