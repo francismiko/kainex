@@ -2,6 +2,32 @@ import type { Strategy, StrategyCreateInput, BacktestResult, OptimizeResponse } 
 import type { Portfolio, Position, Trade } from '@/types/portfolio'
 import type { Bar } from '@/types/market'
 
+export interface AlertItem {
+  id: string
+  symbol: string
+  market: string
+  condition: 'above' | 'below' | 'cross_above' | 'cross_below'
+  price: number
+  message: string
+  enabled: boolean
+  triggered: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AlertCreateInput {
+  symbol: string
+  market?: string
+  condition: 'above' | 'below' | 'cross_above' | 'cross_below'
+  price: number
+  message?: string
+}
+
+export interface AlertUpdateInput {
+  enabled?: boolean
+  message?: string
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8001'
 
 export async function apiFetch<T>(
@@ -184,5 +210,20 @@ export const api = {
         total_bars: number
         duckdb_size_mb: number
       }>('/api/market-data/status'),
+  },
+  alerts: {
+    list: () => apiFetch<AlertItem[]>('/api/alerts'),
+    create: (data: AlertCreateInput) =>
+      apiFetch<AlertItem>('/api/alerts', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiFetch<void>(`/api/alerts/${id}`, { method: 'DELETE' }),
+    update: (id: string, data: AlertUpdateInput) =>
+      apiFetch<AlertItem>(`/api/alerts/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
   },
 }

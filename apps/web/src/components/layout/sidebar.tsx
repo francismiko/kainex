@@ -8,6 +8,7 @@ import {
   Briefcase,
   ShieldAlert,
   Database,
+  Bell,
   ChevronLeft,
   Settings,
 } from 'lucide-react'
@@ -42,6 +43,7 @@ const navItems: NavItem[] = [
   { to: '/trades', label: '交易记录', icon: ArrowRightLeft },
   { to: '/portfolio', label: '持仓组合', icon: Briefcase },
   { to: '/risk', label: '风控监控', icon: ShieldAlert },
+  { to: '/alerts', label: '价格告警', icon: Bell },
   { to: '/data', label: '数据管理', icon: Database },
 ]
 

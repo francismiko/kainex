@@ -65,6 +65,19 @@ CREATE TABLE IF NOT EXISTS backtest_results (
     status TEXT DEFAULT 'completed',
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    market TEXT NOT NULL DEFAULT 'crypto',
+    condition TEXT NOT NULL,
+    price REAL NOT NULL,
+    message TEXT DEFAULT '',
+    enabled INTEGER DEFAULT 1,
+    triggered INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -240,6 +253,80 @@ class SQLiteStore:
         )
         rows = await cursor.fetchall()
         return [self._row_to_dict(r) for r in rows]
+
+    # --- Alerts ---
+
+    async def create_alert(self, alert: dict) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        await self.db.execute(
+            """INSERT INTO alerts
+               (id, symbol, market, condition, price, message, enabled, triggered, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                alert["id"],
+                alert["symbol"],
+                alert.get("market", "crypto"),
+                alert["condition"],
+                alert["price"],
+                alert.get("message", ""),
+                1 if alert.get("enabled", True) else 0,
+                0,
+                now,
+                now,
+            ),
+        )
+        await self.db.commit()
+
+    async def get_alert(self, id: str) -> dict | None:
+        cursor = await self.db.execute("SELECT * FROM alerts WHERE id = ?", (id,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return self._alert_row_to_dict(row)
+
+    async def list_alerts(self) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM alerts ORDER BY created_at DESC"
+        )
+        rows = await cursor.fetchall()
+        return [self._alert_row_to_dict(r) for r in rows]
+
+    async def update_alert(self, id: str, fields: dict) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        set_clauses = []
+        params: list = []
+        for key, value in fields.items():
+            if key == "enabled":
+                set_clauses.append("enabled = ?")
+                params.append(1 if value else 0)
+            elif key == "triggered":
+                set_clauses.append("triggered = ?")
+                params.append(1 if value else 0)
+            elif key == "message":
+                set_clauses.append("message = ?")
+                params.append(value)
+        if not set_clauses:
+            return
+        set_clauses.append("updated_at = ?")
+        params.append(now)
+        params.append(id)
+        await self.db.execute(
+            f"UPDATE alerts SET {', '.join(set_clauses)} WHERE id = ?",
+            params,
+        )
+        await self.db.commit()
+
+    async def delete_alert(self, id: str) -> bool:
+        cursor = await self.db.execute("DELETE FROM alerts WHERE id = ?", (id,))
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    @staticmethod
+    def _alert_row_to_dict(row: aiosqlite.Row) -> dict:
+        d = dict(row)
+        d["enabled"] = bool(d.get("enabled", 1))
+        d["triggered"] = bool(d.get("triggered", 0))
+        return d
 
     @staticmethod
     def _row_to_dict(row: aiosqlite.Row) -> dict:

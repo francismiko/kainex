@@ -4,6 +4,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
+import type { AlertCreateInput, AlertUpdateInput } from '@/lib/api-client'
 import type { StrategyCreateInput, BacktestResult, OptimizeResponse } from '@/types/strategy'
 
 export function useStrategies() {
@@ -133,5 +134,39 @@ export function useOptimize() {
       symbols?: string[]
       metric?: string
     }) => api.backtest.optimize(params) as Promise<OptimizeResponse>,
+  })
+}
+
+// --- Alerts ---
+
+export function useAlerts() {
+  return useQuery({
+    queryKey: ['alerts'],
+    queryFn: api.alerts.list,
+  })
+}
+
+export function useCreateAlert() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: AlertCreateInput) => api.alerts.create(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }),
+  })
+}
+
+export function useDeleteAlert() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.alerts.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }),
+  })
+}
+
+export function useUpdateAlert() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: AlertUpdateInput }) =>
+      api.alerts.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }),
   })
 }
