@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 
@@ -31,8 +31,7 @@ class PortfolioTracker:
     @property
     def total_value(self) -> float:
         position_value = sum(
-            qty * self.prices.get(sym, 0.0)
-            for sym, qty in self.positions.items()
+            qty * self.prices.get(sym, 0.0) for sym, qty in self.positions.items()
         )
         return self.cash + position_value
 

@@ -8,8 +8,12 @@ class Settings(BaseSettings):
 
     # Storage paths — default to project root data/ directory
     data_dir: str = str(Path(__file__).resolve().parents[4] / "data")
-    duckdb_path: str = str(Path(__file__).resolve().parents[4] / "data" / "kainex.duckdb")
-    sqlite_path: str = str(Path(__file__).resolve().parents[4] / "data" / "kainex_state.db")
+    duckdb_path: str = str(
+        Path(__file__).resolve().parents[4] / "data" / "kainex.duckdb"
+    )
+    sqlite_path: str = str(
+        Path(__file__).resolve().parents[4] / "data" / "kainex_state.db"
+    )
     parquet_dir: str = str(Path(__file__).resolve().parents[4] / "data" / "parquet")
 
     # Finnhub API key (free tier)

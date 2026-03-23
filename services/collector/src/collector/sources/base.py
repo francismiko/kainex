@@ -68,9 +68,7 @@ class DataSourceManager:
                     e,
                 )
                 last_error = e
-        raise RuntimeError(
-            f"All data sources failed for {symbol}"
-        ) from last_error
+        raise RuntimeError(f"All data sources failed for {symbol}") from last_error
 
     async def fetch_latest_bar(
         self,
@@ -89,6 +87,4 @@ class DataSourceManager:
                     e,
                 )
                 last_error = e
-        raise RuntimeError(
-            f"All data sources failed for {symbol}"
-        ) from last_error
+        raise RuntimeError(f"All data sources failed for {symbol}") from last_error

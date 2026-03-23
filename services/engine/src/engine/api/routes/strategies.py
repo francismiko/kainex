@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -57,7 +56,9 @@ async def get_strategy(
 ):
     row = await store.get_strategy_config(strategy_id)
     if not row:
-        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Strategy '{strategy_id}' not found"
+        )
     return _row_to_detail(row)
 
 
@@ -76,7 +77,6 @@ async def create_strategy(
         )
 
     sid = uuid.uuid4().hex[:12]
-    now = datetime.now(timezone.utc)
     await store.save_strategy_config(
         id=sid,
         name=req.name,
@@ -97,7 +97,9 @@ async def update_strategy(
 ):
     row = await store.get_strategy_config(strategy_id)
     if not row:
-        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Strategy '{strategy_id}' not found"
+        )
 
     updates: dict = {}
     if req.parameters is not None:
@@ -118,7 +120,9 @@ async def start_strategy(
 ):
     row = await store.get_strategy_config(strategy_id)
     if not row:
-        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Strategy '{strategy_id}' not found"
+        )
 
     await store.update_strategy_fields(strategy_id, {"status": "running"})
     row = await store.get_strategy_config(strategy_id)
@@ -132,7 +136,9 @@ async def stop_strategy(
 ):
     row = await store.get_strategy_config(strategy_id)
     if not row:
-        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Strategy '{strategy_id}' not found"
+        )
 
     await store.update_strategy_fields(strategy_id, {"status": "stopped"})
     row = await store.get_strategy_config(strategy_id)

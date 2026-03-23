@@ -47,7 +47,9 @@ class CollectorScheduler:
         await asyncio.gather(
             self._schedule_cron("astock", astock_cron, collect_astock_intraday),
             self._schedule_cron("us_stock", us_stock_cron, collect_us_stock_intraday),
-            self._schedule_interval("crypto", s.crypto_interval_minutes * 60, collect_crypto),
+            self._schedule_interval(
+                "crypto", s.crypto_interval_minutes * 60, collect_crypto
+            ),
             self._schedule_cron("eod", "0 23 * * *", aggregate_eod),
         )
 

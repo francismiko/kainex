@@ -47,9 +47,7 @@ class BaoStockSource(AbstractDataSource):
     ) -> list[Bar]:
         frequency = _FREQUENCY_MAP.get(timeframe)
         if frequency is None:
-            raise ValueError(
-                f"BaoStock does not support {timeframe.value} timeframe"
-            )
+            raise ValueError(f"BaoStock does not support {timeframe.value} timeframe")
 
         code = _to_baostock_code(symbol)
         start_str = start.strftime("%Y-%m-%d")
@@ -89,12 +87,16 @@ class BaoStockSource(AbstractDataSource):
         for row in rows:
             if is_daily:
                 date_str, open_, high, low, close, volume = row
-                ts = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                ts = datetime.strptime(date_str, "%Y-%m-%d").replace(
+                    tzinfo=timezone.utc
+                )
             else:
                 date_str, time_str, open_, high, low, close, volume = row
                 # time_str format: "20260115093500000"
                 ts_str = f"{date_str} {time_str[:8]}"
-                ts = datetime.strptime(ts_str, "%Y%m%d %H%M%S%f").replace(tzinfo=timezone.utc)
+                ts = datetime.strptime(ts_str, "%Y%m%d %H%M%S%f").replace(
+                    tzinfo=timezone.utc
+                )
 
             if not open_ or not close:
                 continue

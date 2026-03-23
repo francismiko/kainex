@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 import pandas as pd
-from kainex_shared import Market, Signal, SignalType, TimeFrame
+from kainex_shared import Market, Signal, SignalType, TimeFrame  # noqa: F401
 from nautilus_trader.config import StrategyConfig
 from nautilus_trader.model.data import Bar
 from nautilus_trader.model.identifiers import InstrumentId

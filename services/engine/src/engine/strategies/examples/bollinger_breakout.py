@@ -15,7 +15,9 @@ class BollingerBreakout(AbstractStrategy):
     """Bollinger Bands breakout: buy above upper band, sell below lower band."""
 
     name = "bollinger_breakout"
-    description = "Buy when price breaks above upper Bollinger Band, sell below lower band"
+    description = (
+        "Buy when price breaks above upper Bollinger Band, sell below lower band"
+    )
     timeframes = [TimeFrame.M15, TimeFrame.H1, TimeFrame.H4]
     markets = [Market.A_STOCK, Market.CRYPTO, Market.US_STOCK]
 

@@ -7,8 +7,9 @@ class CommissionModel(ABC):
     """Base commission model."""
 
     @abstractmethod
-    def calculate(self, price: float, quantity: float, is_sell: bool = False) -> float:
-        ...
+    def calculate(
+        self, price: float, quantity: float, is_sell: bool = False
+    ) -> float: ...
 
 
 class AStockCommission(CommissionModel):

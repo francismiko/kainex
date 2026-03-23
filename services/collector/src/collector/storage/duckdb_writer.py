@@ -133,10 +133,22 @@ class DuckDBWriter:
             """,
             (symbol, market, timeframe, limit),
         ).fetchall()
-        columns = ["symbol", "market", "timeframe", "open", "high", "low", "close", "volume", "timestamp"]
+        columns = [
+            "symbol",
+            "market",
+            "timeframe",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "timestamp",
+        ]
         return [dict(zip(columns, row)) for row in reversed(result)]
 
-    def export_parquet(self, market: str | None = None, symbol: str | None = None) -> None:
+    def export_parquet(
+        self, market: str | None = None, symbol: str | None = None
+    ) -> None:
         """Export bars to Parquet files, partitioned by market/symbol."""
         if self._conn is None:
             raise RuntimeError("DuckDBWriter not connected — call connect() first")

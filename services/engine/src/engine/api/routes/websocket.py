@@ -174,9 +174,7 @@ def _ensure_mock_task(channel: str) -> None:
             _mock_signal_loop(channel, strategy_id)
         )
     elif parts[0] == "portfolio":
-        _mock_tasks[channel] = asyncio.create_task(
-            _mock_portfolio_loop(channel)
-        )
+        _mock_tasks[channel] = asyncio.create_task(_mock_portfolio_loop(channel))
 
 
 def _maybe_stop_mock_task(channel: str) -> None:
@@ -257,7 +255,9 @@ async def stream(ws: WebSocket) -> None:
 
             else:
                 await ws.send_json(
-                    {"error": "unknown command, use {\"action\": \"subscribe\", \"channel\": \"...\"}"}
+                    {
+                        "error": 'unknown command, use {"action": "subscribe", "channel": "..."}'
+                    }
                 )
 
     except WebSocketDisconnect:

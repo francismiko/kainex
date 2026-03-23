@@ -27,9 +27,16 @@ class SmaCrossoverStrategy(KainexStrategy):
     timeframes = [TimeFrame.D1, TimeFrame.H1]
     markets = [Market.A_STOCK, Market.CRYPTO, Market.US_STOCK]
 
-    def __init__(self, config: SmaCrossoverConfig | None = None, short_window: int = 10, long_window: int = 30) -> None:
+    def __init__(
+        self,
+        config: SmaCrossoverConfig | None = None,
+        short_window: int = 10,
+        long_window: int = 30,
+    ) -> None:
         if config is None:
-            config = SmaCrossoverConfig(short_window=short_window, long_window=long_window)
+            config = SmaCrossoverConfig(
+                short_window=short_window, long_window=long_window
+            )
         super().__init__(config)
         self.short_window = config.short_window
         self.long_window = config.long_window
@@ -44,8 +51,8 @@ class SmaCrossoverStrategy(KainexStrategy):
         if len(self._closes) < self.long_window:
             return []
 
-        short_sma = sum(self._closes[-self.short_window:]) / self.short_window
-        long_sma = sum(self._closes[-self.long_window:]) / self.long_window
+        short_sma = sum(self._closes[-self.short_window :]) / self.short_window
+        long_sma = sum(self._closes[-self.long_window :]) / self.long_window
 
         signals: list[Signal] = []
         if self._prev_short is not None and self._prev_long is not None:

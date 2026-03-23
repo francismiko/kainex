@@ -15,7 +15,9 @@ class RiskManager:
         self.drawdown_breaker = DrawdownCircuitBreaker(threshold=max_drawdown)
         self._halted = False
 
-    def check(self, signal: Signal, portfolio_value: float, position_value: float) -> bool:
+    def check(
+        self, signal: Signal, portfolio_value: float, position_value: float
+    ) -> bool:
         """Return True if the signal passes all risk checks."""
         if self._halted:
             return False

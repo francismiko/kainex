@@ -1,20 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from decimal import Decimal
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from nautilus_trader.backtest.engine import BacktestEngine, BacktestEngineConfig
-from nautilus_trader.backtest.models import FillModel
-from nautilus_trader.model.currencies import USD, BTC
-from nautilus_trader.model.data import Bar, BarType
-from nautilus_trader.model.enums import AccountType, OmsType, BarAggregation, PriceType
-from nautilus_trader.model.identifiers import Venue, InstrumentId, Symbol
-from nautilus_trader.model.instruments import CurrencyPair, Equity
-from nautilus_trader.model.objects import Money, Price, Quantity
-from nautilus_trader.test_kit.providers import TestInstrumentProvider
+from nautilus_trader.model.enums import AccountType, OmsType
 
 from engine.portfolio.performance import PerformanceCalculator
 from engine.strategies.base import AbstractStrategy, KainexStrategy, Market, SignalType
@@ -79,13 +70,21 @@ class NautilusBacktestEngine:
         """Run a backtest using NautilusTrader engine."""
         df = data.copy()
         # Normalize timezone: strip tz from both sides to avoid comparison errors
-        if hasattr(df.index, 'tz') and df.index.tz is not None:
+        if hasattr(df.index, "tz") and df.index.tz is not None:
             df.index = df.index.tz_localize(None)
         if start:
-            ts_start = pd.Timestamp(start).tz_localize(None) if pd.Timestamp(start).tzinfo else pd.Timestamp(start)
+            ts_start = (
+                pd.Timestamp(start).tz_localize(None)
+                if pd.Timestamp(start).tzinfo
+                else pd.Timestamp(start)
+            )
             df = df[df.index >= ts_start]
         if end:
-            ts_end = pd.Timestamp(end).tz_localize(None) if pd.Timestamp(end).tzinfo else pd.Timestamp(end)
+            ts_end = (
+                pd.Timestamp(end).tz_localize(None)
+                if pd.Timestamp(end).tzinfo
+                else pd.Timestamp(end)
+            )
             df = df[df.index <= ts_end]
 
         if df.empty:
@@ -133,13 +132,15 @@ class NautilusBacktestEngine:
                         cash -= cost
                         position = qty
                         avg_price = close
-                        trade_records.append({
-                            "entry_time": idx,
-                            "symbol": sig.symbol or "UNKNOWN",
-                            "side": "buy",
-                            "entry_price": close,
-                            "quantity": qty,
-                        })
+                        trade_records.append(
+                            {
+                                "entry_time": idx,
+                                "symbol": sig.symbol or "UNKNOWN",
+                                "side": "buy",
+                                "entry_price": close,
+                                "quantity": qty,
+                            }
+                        )
                     elif sig.signal_type == SignalType.SELL and position > 0:
                         proceeds = position * close
                         pnl = proceeds - position * avg_price
@@ -161,39 +162,50 @@ class NautilusBacktestEngine:
         """Adapt a pandas row to call KainexStrategy.on_kainex_bar with a mock Bar-like object."""
         # Use a simple adapter since we don't have a real NautilusTrader Bar in simple sim
         from engine.strategies.base import Signal
+
         # Fall back to checking if strategy has closes tracking
         strategy._closes.append(float(row["close"]))
 
         if len(strategy._closes) < strategy.long_window:
             return []
 
-        short_sma = sum(strategy._closes[-strategy.short_window:]) / strategy.short_window
-        long_sma = sum(strategy._closes[-strategy.long_window:]) / strategy.long_window
+        short_sma = (
+            sum(strategy._closes[-strategy.short_window :]) / strategy.short_window
+        )
+        long_sma = sum(strategy._closes[-strategy.long_window :]) / strategy.long_window
 
         signals = []
         if strategy._prev_short is not None and strategy._prev_long is not None:
             symbol = row.get("symbol", "UNKNOWN")
             if strategy._prev_short <= strategy._prev_long and short_sma > long_sma:
-                signals.append(Signal(
-                    symbol=symbol,
-                    signal_type=SignalType.BUY,
-                    price=float(row["close"]),
-                    quantity=1.0,
-                ))
+                signals.append(
+                    Signal(
+                        symbol=symbol,
+                        signal_type=SignalType.BUY,
+                        price=float(row["close"]),
+                        quantity=1.0,
+                    )
+                )
             elif strategy._prev_short >= strategy._prev_long and short_sma < long_sma:
-                signals.append(Signal(
-                    symbol=symbol,
-                    signal_type=SignalType.SELL,
-                    price=float(row["close"]),
-                    quantity=1.0,
-                ))
+                signals.append(
+                    Signal(
+                        symbol=symbol,
+                        signal_type=SignalType.SELL,
+                        price=float(row["close"]),
+                        quantity=1.0,
+                    )
+                )
 
         strategy._prev_short = short_sma
         strategy._prev_long = long_sma
         return signals
 
     def _compute_metrics(
-        self, calc: PerformanceCalculator, returns: pd.Series, equity: pd.Series, trades: pd.DataFrame
+        self,
+        calc: PerformanceCalculator,
+        returns: pd.Series,
+        equity: pd.Series,
+        trades: pd.DataFrame,
     ) -> dict:
         ann = _ann_factor(self.market)
         mean_ret = returns.mean() * ann
@@ -207,7 +219,9 @@ class NautilusBacktestEngine:
         drawdown = (equity - cummax) / cummax
         max_drawdown = drawdown.min()
 
-        total_return = (equity.iloc[-1] / equity.iloc[0]) - 1 if len(equity) > 0 else 0.0
+        total_return = (
+            (equity.iloc[-1] / equity.iloc[0]) - 1 if len(equity) > 0 else 0.0
+        )
 
         win_rate = 0.0
         if not trades.empty and "pnl" in trades.columns:
@@ -234,6 +248,11 @@ class NautilusBacktestEngine:
 class BacktestEngine(NautilusBacktestEngine):
     """Alias for backward compatibility."""
 
-    def __init__(self, initial_capital: float = 100_000.0, freq: str = "1D", market: Market = Market.CRYPTO) -> None:
+    def __init__(
+        self,
+        initial_capital: float = 100_000.0,
+        freq: str = "1D",
+        market: Market = Market.CRYPTO,
+    ) -> None:
         super().__init__(initial_capital=initial_capital, market=market)
         self.freq = freq

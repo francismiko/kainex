@@ -28,17 +28,19 @@ async def get_bars(
     )
     bars = []
     for ts, row in df.head(limit).iterrows():
-        bars.append(BarData(
-            symbol=symbol,
-            market=market,
-            timeframe=timeframe,
-            open=row["open"],
-            high=row["high"],
-            low=row["low"],
-            close=row["close"],
-            volume=row["volume"],
-            timestamp=ts,
-        ))
+        bars.append(
+            BarData(
+                symbol=symbol,
+                market=market,
+                timeframe=timeframe,
+                open=row["open"],
+                high=row["high"],
+                low=row["low"],
+                close=row["close"],
+                volume=row["volume"],
+                timestamp=ts,
+            )
+        )
     return bars
 
 
@@ -56,23 +58,27 @@ async def get_latest_quotes(
         df = duckdb_store.query_bars(symbol=sym, market=market, timeframe="1d")
         if not df.empty:
             last_row = df.iloc[-1]
-            quotes.append(LatestQuote(
-                symbol=sym,
-                market=market,
-                price=float(last_row["close"]),
-                change_24h=0.0,
-                volume_24h=float(last_row["volume"]),
-                timestamp=df.index[-1],
-            ))
+            quotes.append(
+                LatestQuote(
+                    symbol=sym,
+                    market=market,
+                    price=float(last_row["close"]),
+                    change_24h=0.0,
+                    volume_24h=float(last_row["volume"]),
+                    timestamp=df.index[-1],
+                )
+            )
         else:
-            quotes.append(LatestQuote(
-                symbol=sym,
-                market=market,
-                price=0.0,
-                change_24h=0.0,
-                volume_24h=0.0,
-                timestamp=now,
-            ))
+            quotes.append(
+                LatestQuote(
+                    symbol=sym,
+                    market=market,
+                    price=0.0,
+                    change_24h=0.0,
+                    volume_24h=0.0,
+                    timestamp=now,
+                )
+            )
     return quotes
 
 
@@ -92,10 +98,12 @@ async def list_symbols(
         parts = sym.split("/")
         base = parts[0] if len(parts) > 1 else sym
         quote = parts[1] if len(parts) > 1 else ""
-        symbols.append(SymbolInfo(
-            symbol=sym,
-            market=row[1],
-            base=base,
-            quote=quote,
-        ))
+        symbols.append(
+            SymbolInfo(
+                symbol=sym,
+                market=row[1],
+                base=base,
+                quote=quote,
+            )
+        )
     return symbols

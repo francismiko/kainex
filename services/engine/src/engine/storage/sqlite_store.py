@@ -110,12 +110,23 @@ class SQLiteStore:
             """INSERT OR REPLACE INTO strategy_configs
                (id, name, class_name, parameters, markets, timeframes, status, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, 'stopped', ?, ?)""",
-            (id, name, class_name, json.dumps(parameters), json.dumps(markets), json.dumps(timeframes), now, now),
+            (
+                id,
+                name,
+                class_name,
+                json.dumps(parameters),
+                json.dumps(markets),
+                json.dumps(timeframes),
+                now,
+                now,
+            ),
         )
         await self.db.commit()
 
     async def get_strategy_config(self, id: str) -> dict | None:
-        cursor = await self.db.execute("SELECT * FROM strategy_configs WHERE id = ?", (id,))
+        cursor = await self.db.execute(
+            "SELECT * FROM strategy_configs WHERE id = ?", (id,)
+        )
         row = await cursor.fetchone()
         if not row:
             return None
@@ -143,7 +154,9 @@ class SQLiteStore:
         await self.db.commit()
 
     async def list_strategy_configs(self) -> list[dict]:
-        cursor = await self.db.execute("SELECT * FROM strategy_configs ORDER BY created_at DESC")
+        cursor = await self.db.execute(
+            "SELECT * FROM strategy_configs ORDER BY created_at DESC"
+        )
         rows = await cursor.fetchall()
         return [self._row_to_dict(r) for r in rows]
 
@@ -155,15 +168,25 @@ class SQLiteStore:
                (id, strategy_id, symbol, side, quantity, price, filled_price, commission, pnl, status, created_at, filled_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                trade["id"], trade["strategy_id"], trade["symbol"], trade["side"],
-                trade["quantity"], trade["price"], trade.get("filled_price"),
-                trade.get("commission", 0.0), trade.get("pnl", 0.0),
-                trade.get("status", "pending"), trade["created_at"], trade.get("filled_at"),
+                trade["id"],
+                trade["strategy_id"],
+                trade["symbol"],
+                trade["side"],
+                trade["quantity"],
+                trade["price"],
+                trade.get("filled_price"),
+                trade.get("commission", 0.0),
+                trade.get("pnl", 0.0),
+                trade.get("status", "pending"),
+                trade["created_at"],
+                trade.get("filled_at"),
             ),
         )
         await self.db.commit()
 
-    async def list_trades(self, strategy_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict]:
+    async def list_trades(
+        self, strategy_id: str | None = None, limit: int = 100, offset: int = 0
+    ) -> list[dict]:
         if strategy_id:
             cursor = await self.db.execute(
                 "SELECT * FROM trades WHERE strategy_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -186,17 +209,26 @@ class SQLiteStore:
                 metrics, equity_curve, trade_count, status, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                result["id"], result["strategy_id"], json.dumps(result.get("parameters", {})),
-                result["market"], result["start_date"], result["end_date"],
-                result["initial_capital"], json.dumps(result.get("metrics", {})),
-                json.dumps(result.get("equity_curve", [])), result.get("trade_count", 0),
-                result.get("status", "completed"), result["created_at"],
+                result["id"],
+                result["strategy_id"],
+                json.dumps(result.get("parameters", {})),
+                result["market"],
+                result["start_date"],
+                result["end_date"],
+                result["initial_capital"],
+                json.dumps(result.get("metrics", {})),
+                json.dumps(result.get("equity_curve", [])),
+                result.get("trade_count", 0),
+                result.get("status", "completed"),
+                result["created_at"],
             ),
         )
         await self.db.commit()
 
     async def get_backtest_result(self, id: str) -> dict | None:
-        cursor = await self.db.execute("SELECT * FROM backtest_results WHERE id = ?", (id,))
+        cursor = await self.db.execute(
+            "SELECT * FROM backtest_results WHERE id = ?", (id,)
+        )
         row = await cursor.fetchone()
         if not row:
             return None

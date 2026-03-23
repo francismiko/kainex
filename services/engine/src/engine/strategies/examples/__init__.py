@@ -1,6 +1,9 @@
 """Example strategies."""
 
-from engine.strategies.examples.sma_crossover import SmaCrossoverLegacy, SmaCrossoverStrategy
+from engine.strategies.examples.sma_crossover import (
+    SmaCrossoverLegacy,
+    SmaCrossoverStrategy,
+)
 from engine.strategies.examples.rsi_mean_reversion import RsiMeanReversion
 from engine.strategies.examples.bollinger_breakout import BollingerBreakout
 from engine.strategies.examples.macd_crossover import MacdCrossover

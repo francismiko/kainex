@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, Query
 
 from engine.api.deps import get_portfolio_tracker, get_sqlite_store
@@ -49,9 +47,7 @@ async def get_positions(
     store: SQLiteStore = Depends(get_sqlite_store),
 ):
     # Try to get positions from SQLite
-    cursor = await store.db.execute(
-        "SELECT * FROM positions ORDER BY updated_at DESC"
-    )
+    cursor = await store.db.execute("SELECT * FROM positions ORDER BY updated_at DESC")
     rows = await cursor.fetchall()
     if rows:
         positions = []
@@ -60,15 +56,17 @@ async def get_positions(
             qty = row_dict.get("quantity", 0.0)
             avg_price = row_dict.get("avg_price", 0.0)
             market_price = row_dict.get("market_price", 0.0)
-            positions.append(PositionItem(
-                symbol=row_dict["symbol"],
-                market="crypto",
-                side="long" if qty > 0 else "short",
-                quantity=abs(qty),
-                entry_price=avg_price,
-                current_price=market_price,
-                unrealized_pnl=row_dict.get("unrealized_pnl", 0.0),
-            ))
+            positions.append(
+                PositionItem(
+                    symbol=row_dict["symbol"],
+                    market="crypto",
+                    side="long" if qty > 0 else "short",
+                    quantity=abs(qty),
+                    entry_price=avg_price,
+                    current_price=market_price,
+                    unrealized_pnl=row_dict.get("unrealized_pnl", 0.0),
+                )
+            )
         return positions
 
     # Fallback to in-memory tracker
@@ -99,18 +97,20 @@ async def get_trades(
     rows = await store.list_trades(limit=limit, offset=offset)
     trades = []
     for row in rows:
-        trades.append(TradeRecord(
-            id=row["id"],
-            strategy=row.get("strategy_id", ""),
-            symbol=row["symbol"],
-            market="crypto",
-            side=row["side"],
-            price=row.get("filled_price") or row["price"],
-            quantity=row["quantity"],
-            commission=row.get("commission", 0.0),
-            pnl=row.get("pnl", 0.0),
-            timestamp=row["created_at"],
-        ))
+        trades.append(
+            TradeRecord(
+                id=row["id"],
+                strategy=row.get("strategy_id", ""),
+                symbol=row["symbol"],
+                market="crypto",
+                side=row["side"],
+                price=row.get("filled_price") or row["price"],
+                quantity=row["quantity"],
+                commission=row.get("commission", 0.0),
+                pnl=row.get("pnl", 0.0),
+                timestamp=row["created_at"],
+            )
+        )
     return trades
 
 
@@ -136,7 +136,6 @@ async def get_performance(
         )
 
     # Count trades from trade ledger
-    trades = await store.list_trades(limit=1)
     cursor = await store.db.execute("SELECT COUNT(*) FROM trades")
     count_row = await cursor.fetchone()
     total_trades = count_row[0] if count_row else 0

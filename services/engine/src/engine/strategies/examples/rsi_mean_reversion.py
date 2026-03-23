@@ -15,7 +15,9 @@ class RsiMeanReversion(AbstractStrategy):
     """RSI mean reversion: buy when oversold, sell when overbought."""
 
     name = "rsi_mean_reversion"
-    description = "Buy when RSI < oversold threshold, sell when RSI > overbought threshold"
+    description = (
+        "Buy when RSI < oversold threshold, sell when RSI > overbought threshold"
+    )
     timeframes = [TimeFrame.H1, TimeFrame.H4, TimeFrame.D1]
     markets = [Market.A_STOCK, Market.CRYPTO, Market.US_STOCK]
 

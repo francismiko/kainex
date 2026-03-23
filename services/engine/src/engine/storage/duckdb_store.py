@@ -82,7 +82,9 @@ class DuckDBStore:
         )
         logger.info("Exported query result to %s", file_path)
 
-    def execute(self, query: str, params: list | None = None) -> duckdb.DuckDBPyConnection:
+    def execute(
+        self, query: str, params: list | None = None
+    ) -> duckdb.DuckDBPyConnection:
         """Execute an arbitrary SQL query."""
         if params:
             return self._conn.execute(query, params)

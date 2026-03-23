@@ -15,10 +15,17 @@ class DualMaStrategy(AbstractStrategy):
     """Dual moving average strategy supporting EMA and SMA."""
 
     name = "dual_ma"
-    description = "Buy when fast MA crosses above slow MA, sell on cross below (supports EMA/SMA)"
+    description = (
+        "Buy when fast MA crosses above slow MA, sell on cross below (supports EMA/SMA)"
+    )
     timeframes = [
-        TimeFrame.M1, TimeFrame.M5, TimeFrame.M15,
-        TimeFrame.H1, TimeFrame.H4, TimeFrame.D1, TimeFrame.W1,
+        TimeFrame.M1,
+        TimeFrame.M5,
+        TimeFrame.M15,
+        TimeFrame.H1,
+        TimeFrame.H4,
+        TimeFrame.D1,
+        TimeFrame.W1,
     ]
     markets = [Market.A_STOCK, Market.CRYPTO, Market.US_STOCK]
 

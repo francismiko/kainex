@@ -73,7 +73,11 @@ class PerformanceCalculator:
             return 0.0
         return float((returns > 0).sum() / len(returns))
 
-    def win_rate(self, trades: pd.DataFrame | pd.Series | None = None, returns: pd.Series | None = None) -> float:
+    def win_rate(
+        self,
+        trades: pd.DataFrame | pd.Series | None = None,
+        returns: pd.Series | None = None,
+    ) -> float:
         """Win rate based on trades (preferred) or daily returns (fallback).
 
         If *trades* is a DataFrame, expects a 'pnl' column.
@@ -83,7 +87,9 @@ class PerformanceCalculator:
             if isinstance(trades, pd.DataFrame):
                 if trades.empty:
                     return 0.0
-                pnl = trades["pnl"] if "pnl" in trades.columns else pd.Series(dtype=float)
+                pnl = (
+                    trades["pnl"] if "pnl" in trades.columns else pd.Series(dtype=float)
+                )
             else:
                 pnl = trades
             if len(pnl) == 0:

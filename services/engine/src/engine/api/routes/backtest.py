@@ -21,7 +21,11 @@ router = APIRouter()
 
 
 def _market_enum(market_str: str) -> Market:
-    mapping = {"crypto": Market.CRYPTO, "a_stock": Market.A_STOCK, "us_stock": Market.US_STOCK}
+    mapping = {
+        "crypto": Market.CRYPTO,
+        "a_stock": Market.A_STOCK,
+        "us_stock": Market.US_STOCK,
+    }
     return mapping.get(market_str, Market.CRYPTO)
 
 
@@ -102,22 +106,28 @@ async def run_backtest(
     )
 
     # Convert results
-    equity_list = bt_result.equity_curve.tolist() if len(bt_result.equity_curve) > 0 else []
-    metrics = BacktestMetrics(**bt_result.metrics) if bt_result.metrics else BacktestMetrics()
+    equity_list = (
+        bt_result.equity_curve.tolist() if len(bt_result.equity_curve) > 0 else []
+    )
+    metrics = (
+        BacktestMetrics(**bt_result.metrics) if bt_result.metrics else BacktestMetrics()
+    )
 
     trades_list = []
     if not bt_result.trades.empty:
         for _, tr in bt_result.trades.iterrows():
-            trades_list.append(BacktestTrade(
-                entry_time=tr.get("entry_time", req.start_date),
-                exit_time=tr.get("exit_time"),
-                symbol=tr.get("symbol", symbol),
-                side=tr.get("side", "buy"),
-                entry_price=tr.get("entry_price", 0.0),
-                exit_price=tr.get("exit_price"),
-                quantity=tr.get("quantity", 0.0),
-                pnl=tr.get("pnl", 0.0),
-            ))
+            trades_list.append(
+                BacktestTrade(
+                    entry_time=tr.get("entry_time", req.start_date),
+                    exit_time=tr.get("exit_time"),
+                    symbol=tr.get("symbol", symbol),
+                    side=tr.get("side", "buy"),
+                    entry_price=tr.get("entry_price", 0.0),
+                    exit_price=tr.get("exit_price"),
+                    quantity=tr.get("quantity", 0.0),
+                    pnl=tr.get("pnl", 0.0),
+                )
+            )
 
     # Persist result to SQLite
     result_dict = {
@@ -154,13 +164,15 @@ async def list_backtest_results(
     rows = await store.list_backtest_results()
     items = []
     for row in rows:
-        items.append(BacktestListItem(
-            id=row["id"],
-            strategy_id=row["strategy_id"],
-            status=row.get("status", "completed"),
-            metrics=BacktestMetrics(**row.get("metrics", {})),
-            created_at=row["created_at"],
-        ))
+        items.append(
+            BacktestListItem(
+                id=row["id"],
+                strategy_id=row["strategy_id"],
+                status=row.get("status", "completed"),
+                metrics=BacktestMetrics(**row.get("metrics", {})),
+                created_at=row["created_at"],
+            )
+        )
     return items
 
 
@@ -171,7 +183,9 @@ async def get_backtest_result(
 ):
     row = await store.get_backtest_result(result_id)
     if not row:
-        raise HTTPException(status_code=404, detail=f"Backtest result '{result_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Backtest result '{result_id}' not found"
+        )
 
     trades = []  # Individual trade data not stored in DB summary
     return BacktestResponse(

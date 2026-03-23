@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from engine.api.routes import backtest, market_data, portfolio, strategies, websocket
 from engine.storage.sqlite_store import SQLiteStore
 from engine.storage.duckdb_store import DuckDBStore
-from engine.strategies.registry import StrategyRegistry, registry as strategy_registry
+from engine.strategies.registry import registry as strategy_registry
 
 
 @asynccontextmanager
