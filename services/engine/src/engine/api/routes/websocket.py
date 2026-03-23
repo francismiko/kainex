@@ -157,6 +157,19 @@ async def _mock_portfolio_loop(channel: str) -> None:
         pass
 
 
+async def _logs_broadcast_loop(channel: str) -> None:
+    """Background task: forward new log entries to WebSocket subscribers."""
+    from engine.api.routes.logs import subscribe_logs, unsubscribe_logs
+
+    q = subscribe_logs()
+    try:
+        while True:
+            entry = await q.get()
+            await manager.broadcast(channel, entry.model_dump())
+    except asyncio.CancelledError:
+        unsubscribe_logs(q)
+
+
 def _ensure_mock_task(channel: str) -> None:
     """Start a mock data generator for the channel if not already running."""
     if channel in _mock_tasks and not _mock_tasks[channel].done():
@@ -175,6 +188,8 @@ def _ensure_mock_task(channel: str) -> None:
         )
     elif parts[0] == "portfolio":
         _mock_tasks[channel] = asyncio.create_task(_mock_portfolio_loop(channel))
+    elif parts[0] == "logs":
+        _mock_tasks[channel] = asyncio.create_task(_logs_broadcast_loop(channel))
 
 
 def _maybe_stop_mock_task(channel: str) -> None:
@@ -195,6 +210,8 @@ def _parse_channel(channel: str) -> str | None:
     if parts[0] == "signals" and len(parts) == 2:
         return channel
     if parts[0] == "portfolio" and len(parts) == 1:
+        return channel
+    if parts[0] == "logs" and len(parts) == 1:
         return channel
     return None
 

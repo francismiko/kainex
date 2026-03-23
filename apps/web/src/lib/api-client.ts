@@ -2,6 +2,14 @@ import type { Strategy, StrategyCreateInput, BacktestResult, OptimizeResponse } 
 import type { Portfolio, Position, Trade } from '@/types/portfolio'
 import type { Bar } from '@/types/market'
 
+export interface LogEntry {
+  timestamp: string
+  level: string  // INFO, WARNING, ERROR
+  source: string // strategy_id or "system"
+  message: string
+  metadata: Record<string, unknown> | null
+}
+
 export interface AlertItem {
   id: string
   symbol: string
@@ -210,6 +218,36 @@ export const api = {
         total_bars: number
         duckdb_size_mb: number
       }>('/api/market-data/status'),
+  },
+  logs: {
+    list: (params?: {
+      level?: string
+      strategy_id?: string
+      limit?: number
+      offset?: number
+    }) => {
+      const qs = new URLSearchParams()
+      if (params?.level) qs.set('level', params.level)
+      if (params?.strategy_id) qs.set('strategy_id', params.strategy_id)
+      if (params?.limit != null) qs.set('limit', String(params.limit))
+      if (params?.offset != null) qs.set('offset', String(params.offset))
+      const query = qs.toString()
+      return apiFetch<LogEntry[]>(`/api/logs${query ? `?${query}` : ''}`)
+    },
+    byStrategy: (strategyId: string, params?: {
+      level?: string
+      limit?: number
+      offset?: number
+    }) => {
+      const qs = new URLSearchParams()
+      if (params?.level) qs.set('level', params.level)
+      if (params?.limit != null) qs.set('limit', String(params.limit))
+      if (params?.offset != null) qs.set('offset', String(params.offset))
+      const query = qs.toString()
+      return apiFetch<LogEntry[]>(
+        `/api/logs/strategies/${strategyId}${query ? `?${query}` : ''}`,
+      )
+    },
   },
   alerts: {
     list: () => apiFetch<AlertItem[]>('/api/alerts'),

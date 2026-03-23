@@ -137,6 +137,32 @@ export function useOptimize() {
   })
 }
 
+// --- Logs ---
+
+export function useLogs(params?: {
+  level?: string
+  strategy_id?: string
+  limit?: number
+  offset?: number
+}) {
+  return useQuery({
+    queryKey: ['logs', params],
+    queryFn: () => api.logs.list(params),
+  })
+}
+
+export function useStrategyLogs(strategyId: string, params?: {
+  level?: string
+  limit?: number
+  offset?: number
+}) {
+  return useQuery({
+    queryKey: ['logs', 'strategy', strategyId, params],
+    queryFn: () => api.logs.byStrategy(strategyId, params),
+    enabled: !!strategyId,
+  })
+}
+
 // --- Alerts ---
 
 export function useAlerts() {

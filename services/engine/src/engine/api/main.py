@@ -4,7 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from engine.api.routes import alerts, backtest, market_data, portfolio, strategies, websocket
+from engine.api.routes import alerts, backtest, logs, market_data, portfolio, strategies, websocket
 from engine.storage.sqlite_store import SQLiteStore
 from engine.storage.duckdb_store import DuckDBStore
 from engine.strategies.registry import registry as strategy_registry
@@ -45,6 +45,7 @@ app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"]
 app.include_router(market_data.router, prefix="/api/market-data", tags=["market-data"])
 app.include_router(websocket.router, prefix="/api/ws", tags=["websocket"])
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
+app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 
 
 @app.get("/health")

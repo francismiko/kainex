@@ -9,6 +9,7 @@ import {
   ShieldAlert,
   Database,
   Bell,
+  ScrollText,
   ChevronLeft,
   Settings,
 } from 'lucide-react'
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
   { to: '/portfolio', label: '持仓组合', icon: Briefcase },
   { to: '/risk', label: '风控监控', icon: ShieldAlert },
   { to: '/alerts', label: '价格告警', icon: Bell },
+  { to: '/logs', label: '运行日志', icon: ScrollText },
   { to: '/data', label: '数据管理', icon: Database },
 ]
 

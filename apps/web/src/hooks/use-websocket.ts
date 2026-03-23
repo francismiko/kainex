@@ -174,6 +174,53 @@ export function usePortfolioStream(): PortfolioStreamResult {
   return { portfolio, status }
 }
 
+// --------------- Log stream ---------------
+
+export interface LogEntry {
+  timestamp: string
+  level: string
+  source: string
+  message: string
+  metadata: Record<string, unknown> | null
+}
+
+export interface LogStreamResult {
+  /** All log entries accumulated during this subscription */
+  logs: LogEntry[]
+  /** Connection state */
+  status: ConnectionState
+}
+
+/**
+ * Subscribe to real-time log entries.
+ * Channel: `logs`
+ */
+export function useLogStream(): LogStreamResult {
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const status = useConnectionStatus()
+
+  useEffect(() => {
+    acquire()
+    subscribe('logs')
+    setLogs([])
+
+    const removeHandler = addMessageHandler((ch, payload) => {
+      if (ch === 'logs') {
+        const entry = payload as LogEntry
+        setLogs((prev) => [...prev.slice(-999), entry])
+      }
+    })
+
+    return () => {
+      removeHandler()
+      unsubscribe('logs')
+      release()
+    }
+  }, [])
+
+  return { logs, status }
+}
+
 // --------------- Helper: convert WebSocket bar to lightweight-charts candlestick ---------------
 
 /**
