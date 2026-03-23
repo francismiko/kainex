@@ -40,6 +40,14 @@ engine:
 proxy:
   portless proxy start
 
+# Generate TypeScript types from Engine API OpenAPI spec
+generate-types:
+  pnpm --filter @kainex/web generate:types
+
+# Run end-to-end smoke test
+smoke-test:
+  ./scripts/smoke_test.sh
+
 # ─── Build ─────────────────────────────────────────────────────
 
 # Build frontend

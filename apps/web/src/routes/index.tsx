@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PnlChart } from '@/components/charts/pnl-chart.lazy'
+import { AllocationChart } from '@/components/charts/allocation-chart.lazy'
 import {
   Table,
   TableBody,
@@ -11,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DollarSign, TrendingUp, Bot, AlertTriangle, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { formatCurrency, formatPercent, formatPnl } from '@/lib/format'
 
 export const Route = createFileRoute('/')({
   component: Dashboard,
@@ -21,46 +23,57 @@ const mockPnlData = Array.from({ length: 30 }, (_, i) => ({
   value: 100000 + Math.random() * 20000 - 5000 + i * 500,
 }))
 
+const mockBenchmarkData = Array.from({ length: 30 }, (_, i) => ({
+  time: `2026-02-${String(i + 1).padStart(2, '0')}`,
+  value: 100000 + Math.random() * 10000 - 3000 + i * 300,
+}))
+
+const mockAllocationData = [
+  { name: 'A \u80a1', value: 520000 },
+  { name: '\u52a0\u5bc6\u8d27\u5e01', value: 410000 },
+  { name: '\u7f8e\u80a1', value: 304567 },
+]
+
 const stats = [
-  { title: '总资产', value: '\u00a5 1,234,567', change: '+2.34%', icon: DollarSign, positive: true },
-  { title: '今日收益', value: '\u00a5 12,345', change: '+0.98%', icon: TrendingUp, positive: true },
-  { title: '活跃策略', value: '5', change: '3 盈利 / 2 亏损', icon: Bot, positive: true },
-  { title: '风险敞口', value: '62%', change: '中等风险', icon: AlertTriangle, positive: false },
+  { title: '\u603b\u8d44\u4ea7', value: formatCurrency(1234567), change: formatPercent(2.34), icon: DollarSign, positive: true },
+  { title: '\u4eca\u65e5\u6536\u76ca', value: formatCurrency(12345), change: formatPercent(0.98), icon: TrendingUp, positive: true },
+  { title: '\u6d3b\u8dc3\u7b56\u7565', value: '5', change: '3 \u76c8\u5229 / 2 \u4e8f\u635f', icon: Bot, positive: true },
+  { title: '\u98ce\u9669\u6562\u53e3', value: formatPercent(62), change: '\u4e2d\u7b49\u98ce\u9669', icon: AlertTriangle, positive: false },
 ]
 
 const mockStrategies = [
-  { name: 'SMA 交叉', status: 'running' as const, pnl: '+5.2%', pnlValue: 26000, lastSignal: '买入 BTC/USDT', signalTime: '10:32' },
-  { name: 'RSI 均值回归', status: 'running' as const, pnl: '+12.8%', pnlValue: 64000, lastSignal: '卖出 ETH/USDT', signalTime: '10:15' },
-  { name: '布林带突破', status: 'stopped' as const, pnl: '-1.3%', pnlValue: -6500, lastSignal: '-', signalTime: '-' },
-  { name: '动量跟踪', status: 'running' as const, pnl: '+3.7%', pnlValue: 18500, lastSignal: '买入 AAPL', signalTime: '09:45' },
-  { name: '配对交易', status: 'backtest' as const, pnl: 'N/A', pnlValue: 0, lastSignal: '-', signalTime: '-' },
+  { name: 'SMA \u4ea4\u53c9', status: 'running' as const, pnl: '+5.2%', pnlValue: 26000, lastSignal: '\u4e70\u5165 BTC/USDT', signalTime: '10:32' },
+  { name: 'RSI \u5747\u503c\u56de\u5f52', status: 'running' as const, pnl: '+12.8%', pnlValue: 64000, lastSignal: '\u5356\u51fa ETH/USDT', signalTime: '10:15' },
+  { name: '\u5e03\u6797\u5e26\u7a81\u7834', status: 'stopped' as const, pnl: '-1.3%', pnlValue: -6500, lastSignal: '-', signalTime: '-' },
+  { name: '\u52a8\u91cf\u8ddf\u8e2a', status: 'running' as const, pnl: '+3.7%', pnlValue: 18500, lastSignal: '\u4e70\u5165 AAPL', signalTime: '09:45' },
+  { name: '\u914d\u5bf9\u4ea4\u6613', status: 'backtest' as const, pnl: 'N/A', pnlValue: 0, lastSignal: '-', signalTime: '-' },
 ]
 
 const mockPositions = [
-  { symbol: 'BTC/USDT', market: '加密货币', side: '多', qty: '0.5', avgPrice: '62,340', currentPrice: '63,150', pnl: '+405.00', pnlPct: '+0.65%' },
-  { symbol: 'ETH/USDT', market: '加密货币', side: '多', qty: '5.0', avgPrice: '3,420', currentPrice: '3,385', pnl: '-175.00', pnlPct: '-1.02%' },
-  { symbol: '贵州茅台', market: 'A股', side: '多', qty: '100', avgPrice: '1,680', currentPrice: '1,720', pnl: '+4,000', pnlPct: '+2.38%' },
-  { symbol: 'AAPL', market: '美股', side: '多', qty: '50', avgPrice: '185.20', currentPrice: '188.50', pnl: '+165.00', pnlPct: '+1.78%' },
-  { symbol: 'TSLA', market: '美股', side: '空', qty: '30', avgPrice: '245.00', currentPrice: '242.30', pnl: '+81.00', pnlPct: '+1.10%' },
+  { symbol: 'BTC/USDT', market: '\u52a0\u5bc6\u8d27\u5e01', side: '\u591a', qty: '0.5', avgPrice: 62340, currentPrice: 63150, pnlValue: 405, pnlPct: 0.65 },
+  { symbol: 'ETH/USDT', market: '\u52a0\u5bc6\u8d27\u5e01', side: '\u591a', qty: '5.0', avgPrice: 3420, currentPrice: 3385, pnlValue: -175, pnlPct: -1.02 },
+  { symbol: '\u8d35\u5dde\u8305\u53f0', market: 'A\u80a1', side: '\u591a', qty: '100', avgPrice: 1680, currentPrice: 1720, pnlValue: 4000, pnlPct: 2.38 },
+  { symbol: 'AAPL', market: '\u7f8e\u80a1', side: '\u591a', qty: '50', avgPrice: 185.20, currentPrice: 188.50, pnlValue: 165, pnlPct: 1.78 },
+  { symbol: 'TSLA', market: '\u7f8e\u80a1', side: '\u7a7a', qty: '30', avgPrice: 245.00, currentPrice: 242.30, pnlValue: 81, pnlPct: 1.10 },
 ]
 
 const mockSignals = [
-  { time: '10:32:15', strategy: 'SMA 交叉', symbol: 'BTC/USDT', action: '买入', price: '63,150' },
-  { time: '10:15:42', strategy: 'RSI 均值回归', symbol: 'ETH/USDT', action: '卖出', price: '3,385' },
-  { time: '09:45:03', strategy: '动量跟踪', symbol: 'AAPL', action: '买入', price: '188.50' },
-  { time: '09:30:17', strategy: 'SMA 交叉', symbol: '贵州茅台', action: '买入', price: '1,720' },
-  { time: '09:15:28', strategy: '动量跟踪', symbol: 'TSLA', action: '卖出', price: '242.30' },
-  { time: '08:55:11', strategy: 'RSI 均值回归', symbol: 'BTC/USDT', action: '买入', price: '62,800' },
-  { time: '08:32:44', strategy: 'SMA 交叉', symbol: 'ETH/USDT', action: '买入', price: '3,410' },
-  { time: '08:15:59', strategy: '动量跟踪', symbol: 'AAPL', action: '卖出', price: '186.00' },
-  { time: '08:01:23', strategy: 'RSI 均值回归', symbol: '贵州茅台', action: '买入', price: '1,690' },
-  { time: '07:45:06', strategy: 'SMA 交叉', symbol: 'TSLA', action: '卖出', price: '244.10' },
+  { time: '10:32:15', strategy: 'SMA \u4ea4\u53c9', symbol: 'BTC/USDT', action: '\u4e70\u5165', price: '63,150' },
+  { time: '10:15:42', strategy: 'RSI \u5747\u503c\u56de\u5f52', symbol: 'ETH/USDT', action: '\u5356\u51fa', price: '3,385' },
+  { time: '09:45:03', strategy: '\u52a8\u91cf\u8ddf\u8e2a', symbol: 'AAPL', action: '\u4e70\u5165', price: '188.50' },
+  { time: '09:30:17', strategy: 'SMA \u4ea4\u53c9', symbol: '\u8d35\u5dde\u8305\u53f0', action: '\u4e70\u5165', price: '1,720' },
+  { time: '09:15:28', strategy: '\u52a8\u91cf\u8ddf\u8e2a', symbol: 'TSLA', action: '\u5356\u51fa', price: '242.30' },
+  { time: '08:55:11', strategy: 'RSI \u5747\u503c\u56de\u5f52', symbol: 'BTC/USDT', action: '\u4e70\u5165', price: '62,800' },
+  { time: '08:32:44', strategy: 'SMA \u4ea4\u53c9', symbol: 'ETH/USDT', action: '\u4e70\u5165', price: '3,410' },
+  { time: '08:15:59', strategy: '\u52a8\u91cf\u8ddf\u8e2a', symbol: 'AAPL', action: '\u5356\u51fa', price: '186.00' },
+  { time: '08:01:23', strategy: 'RSI \u5747\u503c\u56de\u5f52', symbol: '\u8d35\u5dde\u8305\u53f0', action: '\u4e70\u5165', price: '1,690' },
+  { time: '07:45:06', strategy: 'SMA \u4ea4\u53c9', symbol: 'TSLA', action: '\u5356\u51fa', price: '244.10' },
 ]
 
 function Dashboard() {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">总览</h1>
+      <h1 className="text-2xl font-bold">{'\u603b\u89c8'}</h1>
 
       {/* Stats cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -87,43 +100,46 @@ function Dashboard() {
       {/* Strategy status panel */}
       <Card>
         <CardHeader>
-          <CardTitle>策略实时状态</CardTitle>
+          <CardTitle>{'\u7b56\u7565\u5b9e\u65f6\u72b6\u6001'}</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>策略</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className="text-right">收益</TableHead>
-                <TableHead>最近信号</TableHead>
-                <TableHead className="text-right">时间</TableHead>
+                <TableHead>{'\u7b56\u7565'}</TableHead>
+                <TableHead>{'\u72b6\u6001'}</TableHead>
+                <TableHead className="text-right">{'\u6536\u76ca'}</TableHead>
+                <TableHead>{'\u6700\u8fd1\u4fe1\u53f7'}</TableHead>
+                <TableHead className="text-right">{'\u65f6\u95f4'}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockStrategies.map((s) => (
-                <TableRow key={s.name}>
-                  <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        s.status === 'running'
-                          ? 'default'
-                          : s.status === 'backtest'
-                            ? 'secondary'
-                            : 'outline'
-                      }
-                    >
-                      {s.status === 'running' ? '运行中' : s.status === 'backtest' ? '回测中' : '已停止'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className={`text-right font-mono ${s.pnl.startsWith('+') ? 'text-profit' : s.pnl.startsWith('-') ? 'text-loss' : 'text-muted-foreground'}`}>
-                    {s.pnl}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{s.lastSignal}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{s.signalTime}</TableCell>
-                </TableRow>
-              ))}
+              {mockStrategies.map((s) => {
+                const pnl = formatPnl(s.pnlValue)
+                return (
+                  <TableRow key={s.name}>
+                    <TableCell className="font-medium">{s.name}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          s.status === 'running'
+                            ? 'default'
+                            : s.status === 'backtest'
+                              ? 'secondary'
+                              : 'outline'
+                        }
+                      >
+                        {s.status === 'running' ? '\u8fd0\u884c\u4e2d' : s.status === 'backtest' ? '\u56de\u6d4b\u4e2d' : '\u5df2\u505c\u6b62'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className={`text-right font-mono ${s.pnlValue === 0 ? 'text-muted-foreground' : pnl.className}`}>
+                      {s.pnlValue === 0 ? s.pnl : `${pnl.text} (${s.pnl})`}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{s.lastSignal}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{s.signalTime}</TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -133,84 +149,97 @@ function Dashboard() {
         {/* Top 5 positions */}
         <Card>
           <CardHeader>
-            <CardTitle>持仓 Top 5</CardTitle>
+            <CardTitle>{'\u6301\u4ed3 Top 5'}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>标的</TableHead>
-                  <TableHead>方向</TableHead>
-                  <TableHead className="text-right">现价</TableHead>
-                  <TableHead className="text-right">浮盈</TableHead>
+                  <TableHead>{'\u6807\u7684'}</TableHead>
+                  <TableHead>{'\u65b9\u5411'}</TableHead>
+                  <TableHead className="text-right">{'\u73b0\u4ef7'}</TableHead>
+                  <TableHead className="text-right">{'\u6d6e\u76c8'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockPositions.map((p) => (
-                  <TableRow key={p.symbol}>
-                    <TableCell>
-                      <div className="font-medium">{p.symbol}</div>
-                      <div className="text-xs text-muted-foreground">{p.market}</div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={p.side === '多' ? 'default' : 'destructive'} className="text-xs">
-                        {p.side}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">{p.currentPrice}</TableCell>
-                    <TableCell className={`text-right font-mono ${p.pnl.startsWith('+') ? 'text-profit' : 'text-loss'}`}>
-                      <div>{p.pnl}</div>
-                      <div className="text-xs">{p.pnlPct}</div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {mockPositions.map((p) => {
+                  const pnl = formatPnl(p.pnlValue)
+                  return (
+                    <TableRow key={p.symbol}>
+                      <TableCell>
+                        <div className="font-medium">{p.symbol}</div>
+                        <div className="text-xs text-muted-foreground">{p.market}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={p.side === '\u591a' ? 'default' : 'destructive'} className="text-xs">
+                          {p.side}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(p.currentPrice)}</TableCell>
+                      <TableCell className={`text-right font-mono ${pnl.className}`}>
+                        <div>{pnl.text}</div>
+                        <div className="text-xs">{formatPercent(p.pnlPct)}</div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
 
-        {/* Recent signals feed */}
+        {/* Asset allocation donut chart */}
         <Card>
           <CardHeader>
-            <CardTitle>最新交易信号</CardTitle>
+            <CardTitle>{'\u8d44\u4ea7\u5206\u5e03'}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {mockSignals.map((sig, i) => (
-                <div key={i} className="flex items-center gap-3 text-sm">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
-                    {sig.action === '买入' ? (
-                      <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
-                    ) : (
-                      <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-medium ${sig.action === '买入' ? 'text-profit' : 'text-loss'}`}>
-                        {sig.action}
-                      </span>
-                      <span className="font-medium">{sig.symbol}</span>
-                      <span className="text-muted-foreground">@ {sig.price}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {sig.strategy} -- {sig.time}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <AllocationChart data={mockAllocationData} height={300} />
           </CardContent>
         </Card>
       </div>
 
-      {/* PnL curve */}
+      {/* Recent signals feed */}
       <Card>
         <CardHeader>
-          <CardTitle>收益曲线</CardTitle>
+          <CardTitle>{'\u6700\u65b0\u4ea4\u6613\u4fe1\u53f7'}</CardTitle>
         </CardHeader>
         <CardContent>
-          <PnlChart data={mockPnlData} height={350} />
+          <div className="space-y-3">
+            {mockSignals.map((sig, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+                  {sig.action === '\u4e70\u5165' ? (
+                    <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
+                  ) : (
+                    <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-medium ${sig.action === '\u4e70\u5165' ? 'text-profit' : 'text-loss'}`}>
+                      {sig.action}
+                    </span>
+                    <span className="font-medium">{sig.symbol}</span>
+                    <span className="text-muted-foreground">@ {sig.price}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {sig.strategy} -- {sig.time}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* PnL curve with benchmark */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{'\u6536\u76ca\u66f2\u7ebf'}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PnlChart data={mockPnlData} benchmark={mockBenchmarkData} height={350} />
         </CardContent>
       </Card>
     </div>
