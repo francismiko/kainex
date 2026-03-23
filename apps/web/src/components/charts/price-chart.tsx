@@ -1,15 +1,18 @@
 import { useEffect, useRef, useMemo } from 'react'
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
   HistogramSeries,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
   type CandlestickData,
   type Time,
   type LineData,
   type HistogramData,
+  type SeriesMarker,
 } from 'lightweight-charts'
 import {
   calcSMA,
@@ -31,11 +34,20 @@ export interface IndicatorConfig {
   macd?: { fast: number; slow: number; signal: number }
 }
 
+export interface ChartMarker {
+  time: string | number
+  position: 'aboveBar' | 'belowBar'
+  color: string
+  shape: 'arrowUp' | 'arrowDown' | 'circle'
+  text: string
+}
+
 interface PriceChartProps {
   data: CandlestickData<Time>[]
   realtimeBar?: CandlestickData<Time> | null
   height?: number
   indicators?: IndicatorConfig
+  markers?: ChartMarker[]
 }
 
 // --------------- Colors ---------------
@@ -61,6 +73,7 @@ export function PriceChart({
   realtimeBar,
   height = 400,
   indicators,
+  markers,
 }: PriceChartProps) {
   // Calculate how much height goes to sub-panes
   const subPaneCount = [
@@ -80,6 +93,7 @@ export function PriceChart({
         realtimeBar={realtimeBar}
         height={Math.max(mainChartHeight, 200)}
         indicators={indicators}
+        markers={markers}
       />
       {indicators?.volume && (
         <SubChart
@@ -116,16 +130,19 @@ function MainChart({
   realtimeBar,
   height,
   indicators,
+  markers,
 }: {
   data: CandlestickData<Time>[]
   realtimeBar?: CandlestickData<Time> | null
   height: number
   indicators?: IndicatorConfig
+  markers?: ChartMarker[]
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const overlaySeriesRef = useRef<ISeriesApi<'Line'>[]>([])
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
 
   // Compute overlay data
   const overlays = useMemo(() => {
@@ -250,6 +267,10 @@ function MainChart({
 
     return () => {
       ro.disconnect()
+      if (markersPluginRef.current) {
+        markersPluginRef.current.detach()
+        markersPluginRef.current = null
+      }
       chart.remove()
       chartRef.current = null
       candleSeriesRef.current = null
@@ -285,8 +306,30 @@ function MainChart({
       overlaySeriesRef.current.push(lineSeries)
     }
 
+    // Apply markers to the candle series
+    if (markersPluginRef.current) {
+      markersPluginRef.current.detach()
+      markersPluginRef.current = null
+    }
+    if (markers && markers.length > 0) {
+      const sorted: SeriesMarker<Time>[] = [...markers]
+        .map((m) => ({
+          time: m.time as Time,
+          position: m.position as 'aboveBar' | 'belowBar',
+          color: m.color,
+          shape: m.shape,
+          text: m.text,
+        }))
+        .sort((a, b) => {
+          if (a.time < b.time) return -1
+          if (a.time > b.time) return 1
+          return 0
+        })
+      markersPluginRef.current = createSeriesMarkers(candleSeries, sorted)
+    }
+
     chart.timeScale().fitContent()
-  }, [data, overlays])
+  }, [data, overlays, markers])
 
   // Real-time bar update
   useEffect(() => {

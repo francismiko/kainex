@@ -45,6 +45,17 @@ class PerformanceMetrics(BaseModel):
     total_trades: int
 
 
+class TradeNoteCreate(BaseModel):
+    content: str
+
+
+class TradeNote(BaseModel):
+    id: str
+    trade_id: str
+    content: str
+    created_at: datetime
+
+
 class PortfolioResponse(BaseModel):
     cash: float
     positions: dict[str, float]

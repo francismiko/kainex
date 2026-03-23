@@ -1,10 +1,11 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, Fragment } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton'
-import { useTrades } from '@/hooks/use-api'
+import { useTrades, useTradeNotes, useCreateTradeNote } from '@/hooks/use-api'
 import {
   Table,
   TableBody,
@@ -17,11 +18,13 @@ import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
+  getExpandedRowModel,
   flexRender,
   type ColumnDef,
   type SortingState,
+  type ExpandedState,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Download } from 'lucide-react'
+import { ArrowUpDown, Download, ChevronRight, ChevronDown, Send } from 'lucide-react'
 
 export const Route = createFileRoute('/trades/')({
   component: Trades,
@@ -77,6 +80,26 @@ function apiTradesToDisplay(trades: { id: string; symbol: string; side: string; 
 }
 
 const columns: ColumnDef<TradeRow>[] = [
+  {
+    id: 'expand',
+    header: '',
+    cell: ({ row }) => (
+      <button
+        className="p-1 rounded hover:bg-muted"
+        onClick={(e) => {
+          e.stopPropagation()
+          row.toggleExpanded()
+        }}
+      >
+        {row.getIsExpanded() ? (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
+    ),
+    size: 32,
+  },
   {
     accessorKey: 'time',
     header: ({ column }) => (
@@ -145,6 +168,64 @@ const columns: ColumnDef<TradeRow>[] = [
   },
 ]
 
+function TradeNotesPanel({ tradeId }: { tradeId: string }) {
+  const [noteText, setNoteText] = useState('')
+  const { data: notes, isLoading } = useTradeNotes(tradeId)
+  const createNote = useCreateTradeNote()
+
+  const handleSubmit = () => {
+    const trimmed = noteText.trim()
+    if (!trimmed) return
+    createNote.mutate({ tradeId, content: trimmed })
+    setNoteText('')
+  }
+
+  return (
+    <div className="px-8 py-3 bg-muted/30 space-y-3">
+      <p className="text-xs font-medium text-muted-foreground">交易笔记</p>
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">加载中...</p>
+      ) : notes && notes.length > 0 ? (
+        <ul className="space-y-2">
+          {notes.map((note) => (
+            <li key={note.id} className="text-sm">
+              <span className="text-muted-foreground text-xs mr-2">
+                {new Date(note.created_at).toLocaleString('zh-CN')}
+              </span>
+              {note.content}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">暂无笔记</p>
+      )}
+      <div className="flex gap-2">
+        <Input
+          placeholder="添加笔记..."
+          value={noteText}
+          onChange={(e) => setNoteText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSubmit()
+            }
+          }}
+          className="h-8 text-sm"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleSubmit}
+          disabled={!noteText.trim() || createNote.isPending}
+          className="h-8 px-3"
+        >
+          <Send className="h-3 w-3" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function exportTradesCSV(rows: TradeRow[]) {
   const header = ['时间', '策略', '标的', '方向', '价格', '数量', '手续费', '盈亏']
   const csvRows = [
@@ -169,6 +250,7 @@ function exportTradesCSV(rows: TradeRow[]) {
 
 function Trades() {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'time', desc: true }])
+  const [expanded, setExpanded] = useState<ExpandedState>({})
   const { data, isLoading, isError } = useTrades()
 
   const trades = useMemo(
@@ -179,10 +261,13 @@ function Trades() {
   const table = useReactTable({
     data: trades,
     columns,
-    state: { sorting },
+    state: { sorting, expanded },
     onSortingChange: setSorting,
+    onExpandedChange: setExpanded,
+    getRowCanExpand: () => true,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
   })
 
   const handleExportCSV = useCallback(() => {
@@ -228,13 +313,25 @@ function Trades() {
               </TableHeader>
               <TableBody>
                 {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
-                    ))}
-                  </TableRow>
+                  <Fragment key={row.id}>
+                    <TableRow
+                      className="cursor-pointer"
+                      onClick={() => row.toggleExpanded()}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                    {row.getIsExpanded() && (
+                      <TableRow>
+                        <TableCell colSpan={columns.length} className="p-0">
+                          <TradeNotesPanel tradeId={row.original.id} />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, Query
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from engine.api.deps import get_portfolio_tracker, get_sqlite_store
 from engine.api.schemas.portfolio import (
     PerformanceMetrics,
     PortfolioSummary,
     PositionItem,
+    TradeNote,
+    TradeNoteCreate,
     TradeRecord,
 )
 from engine.portfolio.tracker import PortfolioTracker
@@ -150,3 +154,28 @@ async def get_performance(
         total_return=0.0,
         total_trades=total_trades,
     )
+
+
+@router.post("/trades/{trade_id}/notes", response_model=TradeNote, status_code=201)
+async def create_trade_note(
+    trade_id: str,
+    body: TradeNoteCreate,
+    store: SQLiteStore = Depends(get_sqlite_store),
+):
+    # Verify trade exists
+    cursor = await store.db.execute("SELECT id FROM trades WHERE id = ?", (trade_id,))
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    note_id = str(uuid.uuid4())
+    note = await store.create_trade_note(note_id, trade_id, body.content)
+    return TradeNote(**note)
+
+
+@router.get("/trades/{trade_id}/notes", response_model=list[TradeNote])
+async def get_trade_notes(
+    trade_id: str,
+    store: SQLiteStore = Depends(get_sqlite_store),
+):
+    notes = await store.list_trade_notes(trade_id)
+    return [TradeNote(**n) for n in notes]

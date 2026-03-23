@@ -36,6 +36,13 @@ export interface AlertUpdateInput {
   message?: string
 }
 
+export interface TradeNoteItem {
+  id: string
+  trade_id: string
+  content: string
+  created_at: string
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8001'
 
 export async function apiFetch<T>(
@@ -184,6 +191,13 @@ export const api = {
     trades: (page?: number) =>
       apiFetch<Trade[]>(`/api/portfolio/trades?page=${page ?? 1}`),
     performance: () => apiFetch<unknown>('/api/portfolio/performance'),
+    tradeNotes: (tradeId: string) =>
+      apiFetch<TradeNoteItem[]>(`/api/portfolio/trades/${tradeId}/notes`),
+    createTradeNote: (tradeId: string, content: string) =>
+      apiFetch<TradeNoteItem>(`/api/portfolio/trades/${tradeId}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      }),
   },
   market: {
     bars: (params: {

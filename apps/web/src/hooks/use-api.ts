@@ -137,6 +137,26 @@ export function useOptimize() {
   })
 }
 
+// --- Trade Notes ---
+
+export function useTradeNotes(tradeId: string) {
+  return useQuery({
+    queryKey: ['trade-notes', tradeId],
+    queryFn: () => api.portfolio.tradeNotes(tradeId),
+    enabled: !!tradeId,
+  })
+}
+
+export function useCreateTradeNote() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ tradeId, content }: { tradeId: string; content: string }) =>
+      api.portfolio.createTradeNote(tradeId, content),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ['trade-notes', variables.tradeId] }),
+  })
+}
+
 // --- Logs ---
 
 export function useLogs(params?: {

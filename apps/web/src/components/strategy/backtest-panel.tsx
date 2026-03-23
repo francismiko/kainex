@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -11,9 +12,11 @@ import {
 import { PnlChart } from '@/components/charts/pnl-chart.lazy'
 import { DrawdownChart } from '@/components/charts/drawdown-chart.lazy'
 import { MonthlyHeatmap } from '@/components/charts/monthly-heatmap.lazy'
+import { PriceChart, type ChartMarker } from '@/components/charts/price-chart'
 import { formatPercent, formatNumber, formatCurrency } from '@/lib/format'
 import { useChartHeight } from '@/hooks/use-mobile'
-import type { BacktestResult } from '@/types/strategy'
+import type { BacktestResult, BacktestTrade } from '@/types/strategy'
+import type { CandlestickData, Time } from 'lightweight-charts'
 
 interface BacktestPanelProps {
   result: BacktestResult
@@ -36,11 +39,62 @@ function MetricCard({ label, value, colored }: { label: string; value: string; c
   )
 }
 
+function tradesToMarkers(trades: BacktestTrade[]): ChartMarker[] {
+  const markers: ChartMarker[] = []
+  for (const t of trades) {
+    // Entry marker
+    markers.push({
+      time: t.entry_time || t.timestamp,
+      position: t.side === 'buy' ? 'belowBar' : 'aboveBar',
+      color: t.side === 'buy' ? '#22c55e' : '#ef4444',
+      shape: t.side === 'buy' ? 'arrowUp' : 'arrowDown',
+      text: t.side === 'buy' ? `买 ${formatCurrency(t.entry_price || t.price)}` : `卖 ${formatCurrency(t.entry_price || t.price)}`,
+    })
+    // Exit marker (if exists)
+    if (t.exit_time && t.exit_price) {
+      markers.push({
+        time: t.exit_time,
+        position: t.side === 'buy' ? 'aboveBar' : 'belowBar',
+        color: t.pnl >= 0 ? '#22c55e' : '#ef4444',
+        shape: 'circle',
+        text: `平 ${formatCurrency(t.exit_price)}`,
+      })
+    }
+  }
+  return markers
+}
+
+function equityCurveToCandlestickData(
+  equityCurve: { time: string; value: number }[],
+): CandlestickData<Time>[] {
+  return equityCurve.map((point, i) => {
+    const prev = i > 0 ? equityCurve[i - 1].value : point.value
+    const open = prev
+    const close = point.value
+    const high = Math.max(open, close) * 1.001
+    const low = Math.min(open, close) * 0.999
+    return {
+      time: point.time as unknown as Time,
+      open,
+      high,
+      low,
+      close,
+    }
+  })
+}
+
 export function BacktestPanel({ result }: BacktestPanelProps) {
   const { equity_curve, trades, metrics } = result
   const equityHeight = useChartHeight(280, 220)
   const drawdownHeight = useChartHeight(180, 150)
   const heatmapHeight = useChartHeight(200, 160)
+  const tradeChartHeight = useChartHeight(350, 280)
+
+  const tradeMarkers = useMemo(() => tradesToMarkers(trades), [trades])
+  const candlestickData = useMemo(
+    () => equityCurveToCandlestickData(equity_curve),
+    [equity_curve],
+  )
 
   return (
     <div className="space-y-4">
@@ -64,6 +118,22 @@ export function BacktestPanel({ result }: BacktestPanelProps) {
           <PnlChart data={equity_curve} height={equityHeight} />
         </CardContent>
       </Card>
+
+      {/* Trade markers on price chart */}
+      {trades.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">交易标注</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PriceChart
+              data={candlestickData}
+              height={tradeChartHeight}
+              markers={tradeMarkers}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Drawdown chart */}
       <Card>

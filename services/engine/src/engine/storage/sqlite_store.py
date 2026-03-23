@@ -78,6 +78,14 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS trade_notes (
+    id TEXT PRIMARY KEY,
+    trade_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (trade_id) REFERENCES trades(id)
+);
 """
 
 
@@ -253,6 +261,25 @@ class SQLiteStore:
         )
         rows = await cursor.fetchall()
         return [self._row_to_dict(r) for r in rows]
+
+    # --- Trade Notes ---
+
+    async def create_trade_note(self, note_id: str, trade_id: str, content: str) -> dict:
+        now = datetime.now(timezone.utc).isoformat()
+        await self.db.execute(
+            "INSERT INTO trade_notes (id, trade_id, content, created_at) VALUES (?, ?, ?, ?)",
+            (note_id, trade_id, content, now),
+        )
+        await self.db.commit()
+        return {"id": note_id, "trade_id": trade_id, "content": content, "created_at": now}
+
+    async def list_trade_notes(self, trade_id: str) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM trade_notes WHERE trade_id = ? ORDER BY created_at DESC",
+            (trade_id,),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
 
     # --- Alerts ---
 

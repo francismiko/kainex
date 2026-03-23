@@ -383,6 +383,59 @@ class TestPortfolio:
         assert "total_trades" in data
 
 
+# --------------- Trade Notes ---------------
+
+class TestTradeNotes:
+    def test_create_note(self, _mock_stores):
+        mock_sqlite, _ = _mock_stores
+        now = datetime.now(timezone.utc).isoformat()
+        # Mock trade existence check
+        cursor_mock = AsyncMock()
+        cursor_mock.fetchone.return_value = {"id": "TXN-001"}
+        mock_sqlite.db.execute.return_value = cursor_mock
+        mock_sqlite.create_trade_note.return_value = {
+            "id": "note-001",
+            "trade_id": "TXN-001",
+            "content": "Good entry point",
+            "created_at": now,
+        }
+        resp = client.post("/api/portfolio/trades/TXN-001/notes", json={"content": "Good entry point"})
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["trade_id"] == "TXN-001"
+        assert data["content"] == "Good entry point"
+        assert "created_at" in data
+
+    def test_create_note_trade_not_found(self, _mock_stores):
+        mock_sqlite, _ = _mock_stores
+        cursor_mock = AsyncMock()
+        cursor_mock.fetchone.return_value = None
+        mock_sqlite.db.execute.return_value = cursor_mock
+        resp = client.post("/api/portfolio/trades/NONEXISTENT/notes", json={"content": "Test"})
+        assert resp.status_code == 404
+
+    def test_list_notes_empty(self, _mock_stores):
+        mock_sqlite, _ = _mock_stores
+        mock_sqlite.list_trade_notes.return_value = []
+        resp = client.get("/api/portfolio/trades/TXN-001/notes")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_list_notes_with_data(self, _mock_stores):
+        mock_sqlite, _ = _mock_stores
+        now = datetime.now(timezone.utc).isoformat()
+        mock_sqlite.list_trade_notes.return_value = [
+            {"id": "note-001", "trade_id": "TXN-001", "content": "First note", "created_at": now},
+            {"id": "note-002", "trade_id": "TXN-001", "content": "Second note", "created_at": now},
+        ]
+        resp = client.get("/api/portfolio/trades/TXN-001/notes")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        assert data[0]["content"] == "First note"
+        assert data[1]["content"] == "Second note"
+
+
 # --------------- Market Data ---------------
 
 class TestMarketData:
