@@ -152,6 +152,10 @@ function Market() {
   const [bollingerEnabled, setBollingerEnabled] = useState(false)
   const [rsiEnabled, setRsiEnabled] = useState(false)
   const [macdEnabled, setMacdEnabled] = useState(false)
+  const [stochasticEnabled, setStochasticEnabled] = useState(false)
+  const [supertrendEnabled, setSupertrendEnabled] = useState(false)
+  const [parabolicSarEnabled, setParabolicSarEnabled] = useState(false)
+  const [keltnerEnabled, setKeltnerEnabled] = useState(false)
 
   const selectedSymbol = symbols.find((s) => s.value === symbol)
 
@@ -189,8 +193,12 @@ function Market() {
     if (volumeEnabled) config.volume = true
     if (rsiEnabled) config.rsi = 14
     if (macdEnabled) config.macd = { fast: 12, slow: 26, signal: 9 }
+    if (stochasticEnabled) config.stochastic = { kPeriod: 14, dPeriod: 3 }
+    if (supertrendEnabled) config.supertrend = { period: 7, multiplier: 3.0 }
+    if (parabolicSarEnabled) config.parabolicSar = { af: 0.02, maxAf: 0.2 }
+    if (keltnerEnabled) config.keltner = { period: 20, multiplier: 1.5 }
     return config
-  }, [smaPeriods, emaPeriods, bollingerEnabled, volumeEnabled, rsiEnabled, macdEnabled])
+  }, [smaPeriods, emaPeriods, bollingerEnabled, volumeEnabled, rsiEnabled, macdEnabled, stochasticEnabled, supertrendEnabled, parabolicSarEnabled, keltnerEnabled])
 
   const toggleSmaPeriod = useCallback((period: number) => {
     setSmaPeriods((prev) =>
@@ -211,7 +219,11 @@ function Market() {
     (bollingerEnabled ? 1 : 0) +
     (volumeEnabled ? 1 : 0) +
     (rsiEnabled ? 1 : 0) +
-    (macdEnabled ? 1 : 0)
+    (macdEnabled ? 1 : 0) +
+    (stochasticEnabled ? 1 : 0) +
+    (supertrendEnabled ? 1 : 0) +
+    (parabolicSarEnabled ? 1 : 0) +
+    (keltnerEnabled ? 1 : 0)
 
   return (
     <div className="space-y-6">
@@ -340,6 +352,27 @@ function Market() {
                     >
                       Bollinger Bands (20, 2)
                     </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={keltnerEnabled}
+                      onCheckedChange={(v) => setKeltnerEnabled(!!v)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      Keltner Channel (20, 1.5)
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={supertrendEnabled}
+                      onCheckedChange={(v) => setSupertrendEnabled(!!v)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      Supertrend (7, 3)
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={parabolicSarEnabled}
+                      onCheckedChange={(v) => setParabolicSarEnabled(!!v)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      Parabolic SAR
+                    </DropdownMenuCheckboxItem>
 
                     <DropdownMenuSeparator />
 
@@ -365,6 +398,13 @@ function Market() {
                       onSelect={(e) => e.preventDefault()}
                     >
                       MACD (12, 26, 9)
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={stochasticEnabled}
+                      onCheckedChange={(v) => setStochasticEnabled(!!v)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      Stochastic (14, 3)
                     </DropdownMenuCheckboxItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

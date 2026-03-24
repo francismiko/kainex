@@ -21,6 +21,10 @@ import {
   calcVolume,
   calcRSI,
   calcMACD,
+  calcStochastic,
+  calcSupertrend,
+  calcParabolicSAR,
+  calcKeltner,
 } from '@/lib/indicators'
 
 // --------------- Types ---------------
@@ -32,6 +36,10 @@ export interface IndicatorConfig {
   volume?: boolean
   rsi?: number
   macd?: { fast: number; slow: number; signal: number }
+  stochastic?: { kPeriod: number; dPeriod: number }
+  supertrend?: { period: number; multiplier: number }
+  parabolicSar?: { af: number; maxAf: number }
+  keltner?: { period: number; multiplier: number }
 }
 
 export interface ChartMarker {
@@ -58,6 +66,9 @@ const BB_COLOR = '#6366f1'
 const RSI_COLOR = '#e879f9'
 const MACD_FAST_COLOR = '#3b82f6'
 const MACD_SLOW_COLOR = '#ef4444'
+const STOCH_K_COLOR = '#3b82f6'
+const STOCH_D_COLOR = '#f97316'
+const KELTNER_COLOR = '#14b8a6'
 
 function getCSSColor(varName: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement)
@@ -80,6 +91,7 @@ export function PriceChart({
     indicators?.volume,
     indicators?.rsi,
     indicators?.macd,
+    indicators?.stochastic,
   ].filter(Boolean).length
 
   const mainChartHeight = subPaneCount > 0
@@ -119,6 +131,14 @@ export function PriceChart({
           height={120}
         />
       )}
+      {indicators?.stochastic && (
+        <SubChart
+          type="stochastic"
+          data={data}
+          indicators={indicators}
+          height={120}
+        />
+      )}
     </div>
   )
 }
@@ -143,6 +163,18 @@ function MainChart({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const overlaySeriesRef = useRef<ISeriesApi<'Line'>[]>([])
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+
+  // Compute Supertrend data (needs special rendering with per-point colors)
+  const supertrendData = useMemo(() => {
+    if (!indicators?.supertrend || data.length === 0) return null
+    return calcSupertrend(data, indicators.supertrend.period, indicators.supertrend.multiplier)
+  }, [data, indicators?.supertrend])
+
+  // Compute Parabolic SAR data (rendered as markers)
+  const parabolicSarData = useMemo(() => {
+    if (!indicators?.parabolicSar || data.length === 0) return null
+    return calcParabolicSAR(data, indicators.parabolicSar.af, indicators.parabolicSar.maxAf)
+  }, [data, indicators?.parabolicSar])
 
   // Compute overlay data
   const overlays = useMemo(() => {
@@ -208,6 +240,31 @@ function MainChart({
         color: BB_COLOR,
         lineWidth: 1,
         lineStyle: 2, // Dashed
+      })
+    }
+
+    // Keltner Channel
+    if (indicators.keltner) {
+      const kc = calcKeltner(data, indicators.keltner.period, indicators.keltner.multiplier)
+      result.push({
+        key: 'kc-middle',
+        data: kc.middle.map((p) => ({ time: p.time, value: p.value })),
+        color: KELTNER_COLOR,
+        lineWidth: 1,
+      })
+      result.push({
+        key: 'kc-upper',
+        data: kc.upper.map((p) => ({ time: p.time, value: p.value })),
+        color: KELTNER_COLOR,
+        lineWidth: 1,
+        lineStyle: 2,
+      })
+      result.push({
+        key: 'kc-lower',
+        data: kc.lower.map((p) => ({ time: p.time, value: p.value })),
+        color: KELTNER_COLOR,
+        lineWidth: 1,
+        lineStyle: 2,
       })
     }
 
@@ -306,6 +363,68 @@ function MainChart({
       overlaySeriesRef.current.push(lineSeries)
     }
 
+    // Supertrend: two line series (green segments + red segments) with overlap at transitions
+    if (supertrendData && supertrendData.length > 0) {
+      const greenPoints: LineData<Time>[] = []
+      const redPoints: LineData<Time>[] = []
+      for (let i = 0; i < supertrendData.length; i++) {
+        const pt = supertrendData[i]
+        const lineData: LineData<Time> = { time: pt.time, value: pt.value }
+        if (pt.color === '#22c55e') {
+          greenPoints.push(lineData)
+          // Add transition point to red to avoid gap
+          if (i > 0 && supertrendData[i - 1].color !== '#22c55e') {
+            greenPoints.splice(greenPoints.length - 1, 0, { time: supertrendData[i - 1].time, value: supertrendData[i - 1].value })
+          }
+        } else {
+          redPoints.push(lineData)
+          if (i > 0 && supertrendData[i - 1].color === '#22c55e') {
+            redPoints.splice(redPoints.length - 1, 0, { time: supertrendData[i - 1].time, value: supertrendData[i - 1].value })
+          }
+        }
+      }
+      if (greenPoints.length > 0) {
+        const greenSeries = chart.addSeries(LineSeries, {
+          color: '#22c55e',
+          lineWidth: 2,
+          crosshairMarkerVisible: false,
+          lastValueVisible: false,
+          priceLineVisible: false,
+        })
+        greenSeries.setData(greenPoints)
+        overlaySeriesRef.current.push(greenSeries)
+      }
+      if (redPoints.length > 0) {
+        const redSeries = chart.addSeries(LineSeries, {
+          color: '#ef4444',
+          lineWidth: 2,
+          crosshairMarkerVisible: false,
+          lastValueVisible: false,
+          priceLineVisible: false,
+        })
+        redSeries.setData(redPoints)
+        overlaySeriesRef.current.push(redSeries)
+      }
+    }
+
+    // Parabolic SAR: render as a line with small circle markers
+    if (parabolicSarData && parabolicSarData.length > 0) {
+      const sarSeries = chart.addSeries(LineSeries, {
+        color: 'rgba(0,0,0,0)',
+        lineWidth: 1,
+        lineVisible: false,
+        crosshairMarkerVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        pointMarkersVisible: true,
+        pointMarkersRadius: 2,
+      })
+      sarSeries.setData(
+        parabolicSarData.map((p) => ({ time: p.time, value: p.value })) as LineData<Time>[],
+      )
+      overlaySeriesRef.current.push(sarSeries)
+    }
+
     // Apply markers to the candle series
     if (markersPluginRef.current) {
       markersPluginRef.current.detach()
@@ -329,7 +448,7 @@ function MainChart({
     }
 
     chart.timeScale().fitContent()
-  }, [data, overlays, markers])
+  }, [data, overlays, markers, supertrendData, parabolicSarData])
 
   // Real-time bar update
   useEffect(() => {
@@ -348,7 +467,7 @@ function SubChart({
   indicators,
   height,
 }: {
-  type: 'volume' | 'rsi' | 'macd'
+  type: 'volume' | 'rsi' | 'macd' | 'stochastic'
   data: CandlestickData<Time>[]
   indicators: IndicatorConfig
   height: number
@@ -385,6 +504,15 @@ function SubChart({
           indicators.macd.slow,
           indicators.macd.signal,
         ),
+      }
+    }
+
+    if (type === 'stochastic' && indicators.stochastic) {
+      const stoch = calcStochastic(data, indicators.stochastic.kPeriod, indicators.stochastic.dPeriod)
+      return {
+        type: 'stochastic' as const,
+        k: stoch.k,
+        d: stoch.d,
       }
     }
 
@@ -572,6 +700,56 @@ function SubChart({
       })
     }
 
+    if (seriesData.type === 'stochastic') {
+      const kSeries = chart.addSeries(LineSeries, {
+        color: STOCH_K_COLOR,
+        lineWidth: 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      kSeries.setData(
+        seriesData.k.map((p) => ({
+          time: p.time,
+          value: p.value,
+        })) as LineData<Time>[],
+      )
+
+      const dSeries = chart.addSeries(LineSeries, {
+        color: STOCH_D_COLOR,
+        lineWidth: 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      dSeries.setData(
+        seriesData.d.map((p) => ({
+          time: p.time,
+          value: p.value,
+        })) as LineData<Time>[],
+      )
+
+      // Overbought/Oversold reference lines (80/20)
+      kSeries.createPriceLine({
+        price: 80,
+        color: 'rgba(239, 68, 68, 0.4)',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: '',
+      })
+      kSeries.createPriceLine({
+        price: 20,
+        color: 'rgba(34, 197, 94, 0.4)',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: '',
+      })
+
+      chart.priceScale('right').applyOptions({
+        scaleMargins: { top: 0.05, bottom: 0.05 },
+      })
+    }
+
     chart.timeScale().fitContent()
   }, [seriesData])
 
@@ -583,7 +761,9 @@ function SubChart({
         ? `RSI(${indicators.rsi})`
         : type === 'macd'
           ? `MACD(${indicators.macd?.fast},${indicators.macd?.slow},${indicators.macd?.signal})`
-          : ''
+          : type === 'stochastic'
+            ? `Stochastic(${indicators.stochastic?.kPeriod},${indicators.stochastic?.dPeriod})`
+            : ''
 
   return (
     <div className="relative">

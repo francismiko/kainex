@@ -12,6 +12,8 @@ import logging
 import numpy as np
 import pandas as pd
 
+import pandas_ta as ta
+
 from engine.indicators.technical import TechnicalIndicators
 
 logger = logging.getLogger(__name__)
@@ -111,6 +113,49 @@ class FeatureStore:
         else:
             features["bb_percent_b"] = np.nan
 
+        # --- ADX ---
+        adx_result = ta.adx(high, low, close, length=14)
+        if adx_result is not None:
+            features["adx_14"] = adx_result[f"ADX_14"]
+            features["di_plus_14"] = adx_result[f"DMP_14"]
+            features["di_minus_14"] = adx_result[f"DMN_14"]
+        else:
+            features["adx_14"] = np.nan
+            features["di_plus_14"] = np.nan
+            features["di_minus_14"] = np.nan
+
+        # --- Volume indicators ---
+        obv = ta.obv(close, volume)
+        features["obv"] = obv if obv is not None else np.nan
+
+        cmf = ta.cmf(high, low, close, volume, length=20)
+        features["cmf_20"] = cmf if cmf is not None else np.nan
+
+        mfi = ta.mfi(high, low, close, volume, length=14)
+        features["mfi_14"] = mfi if mfi is not None else np.nan
+
+        # --- Oscillators ---
+        willr = ta.willr(high, low, close, length=14)
+        features["willr_14"] = willr if willr is not None else np.nan
+
+        cci = ta.cci(high, low, close, length=20)
+        features["cci_20"] = cci if cci is not None else np.nan
+
+        # --- ATR percentage ---
+        features["atr_pct"] = (
+            atr / close if atr is not None else np.nan
+        )
+
+        # --- VWAP ---
+        if "volume" in df.columns:
+            vwap = ta.vwap(high, low, close, volume)
+            if vwap is not None:
+                features["vwap"] = vwap
+                features["price_vs_vwap"] = close / vwap - 1
+            else:
+                features["vwap"] = np.nan
+                features["price_vs_vwap"] = np.nan
+
         # --- Volatility ---
         features["rolling_std_20"] = close.pct_change().rolling(20).std()
         features["realized_volatility"] = np.sqrt(
@@ -154,6 +199,21 @@ class FeatureStore:
         # Technical indicators
         names.extend(["rsi_14", "macd", "macd_signal", "macd_hist", "atr_14"])
         names.append("bb_percent_b")
+
+        # ADX
+        names.extend(["adx_14", "di_plus_14", "di_minus_14"])
+
+        # Volume indicators
+        names.extend(["obv", "cmf_20", "mfi_14"])
+
+        # Oscillators
+        names.extend(["willr_14", "cci_20"])
+
+        # ATR percentage
+        names.append("atr_pct")
+
+        # VWAP
+        names.extend(["vwap", "price_vs_vwap"])
 
         # Volatility
         names.extend(["rolling_std_20", "realized_volatility"])

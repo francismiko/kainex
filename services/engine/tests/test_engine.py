@@ -92,6 +92,74 @@ class TestTechnicalIndicators:
         valid = result.dropna()
         assert (valid > 0).all()
 
+    def test_adx(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.adx(df["high"], df["low"], df["close"], length=14)
+        assert isinstance(result, pd.DataFrame)
+        assert not result.dropna(how="all").empty
+
+    def test_vwap(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.vwap(df["high"], df["low"], df["close"], df["volume"])
+        assert isinstance(result, pd.Series)
+        assert not result.dropna().empty
+
+    def test_obv(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.obv(df["close"], df["volume"])
+        assert isinstance(result, pd.Series)
+        assert not result.dropna().empty
+
+    def test_willr(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.willr(df["high"], df["low"], df["close"], length=14)
+        assert isinstance(result, pd.Series)
+        valid = result.dropna()
+        assert (valid <= 0).all() and (valid >= -100).all()
+
+    def test_cci(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.cci(df["high"], df["low"], df["close"], length=20)
+        assert isinstance(result, pd.Series)
+        assert not result.dropna().empty
+
+    def test_mfi(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.mfi(df["high"], df["low"], df["close"], df["volume"], length=14)
+        assert isinstance(result, pd.Series)
+        valid = result.dropna()
+        assert (valid >= 0).all() and (valid <= 100).all()
+
+    def test_supertrend(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.supertrend(df["high"], df["low"], df["close"], length=7, multiplier=3.0)
+        assert isinstance(result, pd.DataFrame)
+        assert not result.dropna(how="all").empty
+
+    def test_keltner(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.keltner(df["high"], df["low"], df["close"], length=20, multiplier=1.5)
+        assert isinstance(result, pd.DataFrame)
+        assert not result.dropna(how="all").empty
+
+    def test_cmf(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.cmf(df["high"], df["low"], df["close"], df["volume"], length=20)
+        assert isinstance(result, pd.Series)
+        assert not result.dropna().empty
+
+    def test_psar(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.psar(df["high"], df["low"], df["close"])
+        assert isinstance(result, pd.DataFrame)
+        assert not result.dropna(how="all").empty
+
+    def test_ichimoku(self):
+        df = _make_ohlcv()
+        result = TechnicalIndicators.ichimoku(df["high"], df["low"], df["close"])
+        assert isinstance(result, pd.DataFrame)
+        assert not result.dropna(how="all").empty
+
 
 # --------------- PerformanceCalculator ---------------
 
@@ -755,6 +823,12 @@ class TestFeatureStore:
             "rolling_std_20", "realized_volatility",
             "volume_ma_ratio", "volume_std",
             "day_of_week", "month", "is_month_end",
+            # New indicator features
+            "adx_14", "di_plus_14", "di_minus_14",
+            "obv", "cmf_20", "mfi_14",
+            "willr_14", "cci_20",
+            "atr_pct",
+            "vwap", "price_vs_vwap",
         }
         assert expected.issubset(set(result.columns))
 
@@ -783,6 +857,34 @@ class TestFeatureStore:
         result = self.fs.compute_features(self.df)
         rsi = result["rsi_14"]
         assert (rsi >= 0).all() and (rsi <= 100).all()
+
+    def test_adx_features(self):
+        result = self.fs.compute_features(self.df)
+        assert "adx_14" in result.columns
+        assert "di_plus_14" in result.columns
+        assert "di_minus_14" in result.columns
+
+    def test_volume_indicator_features(self):
+        result = self.fs.compute_features(self.df)
+        assert "obv" in result.columns
+        assert "cmf_20" in result.columns
+        assert "mfi_14" in result.columns
+
+    def test_oscillator_features(self):
+        result = self.fs.compute_features(self.df)
+        assert "willr_14" in result.columns
+        assert "cci_20" in result.columns
+
+    def test_atr_pct_feature(self):
+        result = self.fs.compute_features(self.df)
+        assert "atr_pct" in result.columns
+        valid = result["atr_pct"]
+        assert (valid > 0).all()
+
+    def test_vwap_features(self):
+        result = self.fs.compute_features(self.df)
+        assert "vwap" in result.columns
+        assert "price_vs_vwap" in result.columns
 
     def test_short_data_returns_empty(self):
         """With very few rows, features may be fully NaN and result empty."""

@@ -243,6 +243,278 @@ export function calcMACD(
   return { macd: macdLine, signal: signalLine, histogram }
 }
 
+// --------------- Stochastic ---------------
+
+export interface StochasticResult {
+  k: LinePoint[]
+  d: LinePoint[]
+}
+
+export function calcStochastic(
+  data: CandlestickData<Time>[],
+  kPeriod = 14,
+  dPeriod = 3,
+): StochasticResult {
+  const k: LinePoint[] = []
+  const d: LinePoint[] = []
+
+  if (data.length < kPeriod) return { k, d }
+
+  const kValues: number[] = []
+
+  for (let i = kPeriod - 1; i < data.length; i++) {
+    let highest = -Infinity
+    let lowest = Infinity
+    for (let j = i - kPeriod + 1; j <= i; j++) {
+      if (data[j].high > highest) highest = data[j].high
+      if (data[j].low < lowest) lowest = data[j].low
+    }
+    const kVal = highest === lowest ? 50 : ((data[i].close - lowest) / (highest - lowest)) * 100
+    kValues.push(kVal)
+    k.push({ time: data[i].time, value: kVal })
+  }
+
+  // %D = SMA of %K
+  if (kValues.length >= dPeriod) {
+    let sum = 0
+    for (let i = 0; i < dPeriod; i++) sum += kValues[i]
+    d.push({ time: k[dPeriod - 1].time, value: sum / dPeriod })
+    for (let i = dPeriod; i < kValues.length; i++) {
+      sum += kValues[i] - kValues[i - dPeriod]
+      d.push({ time: k[i].time, value: sum / dPeriod })
+    }
+  }
+
+  return { k, d }
+}
+
+// --------------- VWAP ---------------
+
+export function calcVWAP(
+  data: CandlestickData<Time>[],
+  volume?: number[],
+): LinePoint[] {
+  const result: LinePoint[] = []
+  if (data.length === 0) return result
+
+  let cumVolPrice = 0
+  let cumVol = 0
+
+  for (let i = 0; i < data.length; i++) {
+    const typicalPrice = (data[i].high + data[i].low + data[i].close) / 3
+    const vol = volume && volume[i] != null ? volume[i] : generateVolumeFromBar(data[i])
+    cumVolPrice += typicalPrice * vol
+    cumVol += vol
+    if (cumVol > 0) {
+      result.push({ time: data[i].time, value: cumVolPrice / cumVol })
+    }
+  }
+
+  return result
+}
+
+function generateVolumeFromBar(bar: CandlestickData<Time>): number {
+  const range = bar.high - bar.low
+  return Math.round(bar.close * 100 + range * 5000)
+}
+
+// --------------- Supertrend ---------------
+
+export interface SupertrendPoint {
+  time: Time
+  value: number
+  color: string
+}
+
+export function calcSupertrend(
+  data: CandlestickData<Time>[],
+  period = 7,
+  multiplier = 3.0,
+): SupertrendPoint[] {
+  const result: SupertrendPoint[] = []
+  if (data.length < period + 1) return result
+
+  // Calculate ATR
+  const trueRanges: number[] = [data[0].high - data[0].low]
+  for (let i = 1; i < data.length; i++) {
+    const tr = Math.max(
+      data[i].high - data[i].low,
+      Math.abs(data[i].high - data[i - 1].close),
+      Math.abs(data[i].low - data[i - 1].close),
+    )
+    trueRanges.push(tr)
+  }
+
+  // ATR via SMA for initial, then Wilder's smoothing
+  const atr: number[] = new Array(data.length).fill(0)
+  let atrSum = 0
+  for (let i = 0; i < period; i++) atrSum += trueRanges[i]
+  atr[period - 1] = atrSum / period
+  for (let i = period; i < data.length; i++) {
+    atr[i] = (atr[i - 1] * (period - 1) + trueRanges[i]) / period
+  }
+
+  let upperBand = 0
+  let lowerBand = 0
+  let supertrend = 0
+  let prevClose = data[period - 1].close
+  let isUpTrend = true
+
+  for (let i = period - 1; i < data.length; i++) {
+    const hl2 = (data[i].high + data[i].low) / 2
+    const basicUpper = hl2 + multiplier * atr[i]
+    const basicLower = hl2 - multiplier * atr[i]
+
+    if (i === period - 1) {
+      upperBand = basicUpper
+      lowerBand = basicLower
+      isUpTrend = data[i].close > hl2
+      supertrend = isUpTrend ? lowerBand : upperBand
+    } else {
+      upperBand = basicUpper < upperBand || prevClose > upperBand ? basicUpper : upperBand
+      lowerBand = basicLower > lowerBand || prevClose < lowerBand ? basicLower : lowerBand
+
+      if (isUpTrend) {
+        if (data[i].close < lowerBand) {
+          isUpTrend = false
+          supertrend = upperBand
+        } else {
+          supertrend = lowerBand
+        }
+      } else {
+        if (data[i].close > upperBand) {
+          isUpTrend = true
+          supertrend = lowerBand
+        } else {
+          supertrend = upperBand
+        }
+      }
+    }
+
+    prevClose = data[i].close
+    result.push({
+      time: data[i].time,
+      value: supertrend,
+      color: isUpTrend ? '#22c55e' : '#ef4444',
+    })
+  }
+
+  return result
+}
+
+// --------------- Parabolic SAR ---------------
+
+export function calcParabolicSAR(
+  data: CandlestickData<Time>[],
+  af = 0.02,
+  maxAf = 0.2,
+): LinePoint[] {
+  const result: LinePoint[] = []
+  if (data.length < 2) return result
+
+  let isUpTrend = data[1].close > data[0].close
+  let sar = isUpTrend ? data[0].low : data[0].high
+  let ep = isUpTrend ? data[0].high : data[0].low
+  let currentAf = af
+
+  result.push({ time: data[0].time, value: sar })
+
+  for (let i = 1; i < data.length; i++) {
+    const prevSar = sar
+    sar = prevSar + currentAf * (ep - prevSar)
+
+    if (isUpTrend) {
+      // Clamp SAR to be at or below the previous two lows
+      if (i >= 2) sar = Math.min(sar, data[i - 1].low, data[i - 2].low)
+      else sar = Math.min(sar, data[i - 1].low)
+
+      if (data[i].low < sar) {
+        // Reverse to downtrend
+        isUpTrend = false
+        sar = ep
+        ep = data[i].low
+        currentAf = af
+      } else {
+        if (data[i].high > ep) {
+          ep = data[i].high
+          currentAf = Math.min(currentAf + af, maxAf)
+        }
+      }
+    } else {
+      // Clamp SAR to be at or above the previous two highs
+      if (i >= 2) sar = Math.max(sar, data[i - 1].high, data[i - 2].high)
+      else sar = Math.max(sar, data[i - 1].high)
+
+      if (data[i].high > sar) {
+        // Reverse to uptrend
+        isUpTrend = true
+        sar = ep
+        ep = data[i].high
+        currentAf = af
+      } else {
+        if (data[i].low < ep) {
+          ep = data[i].low
+          currentAf = Math.min(currentAf + af, maxAf)
+        }
+      }
+    }
+
+    result.push({ time: data[i].time, value: sar })
+  }
+
+  return result
+}
+
+// --------------- Keltner Channel ---------------
+
+export interface KeltnerResult {
+  upper: LinePoint[]
+  middle: LinePoint[]
+  lower: LinePoint[]
+}
+
+export function calcKeltner(
+  data: CandlestickData<Time>[],
+  period = 20,
+  multiplier = 1.5,
+): KeltnerResult {
+  const upper: LinePoint[] = []
+  const middle: LinePoint[] = []
+  const lower: LinePoint[] = []
+
+  if (data.length < period + 1) return { upper, middle, lower }
+
+  // EMA of close for middle band
+  const emaData = calcEMA(data, period)
+
+  // ATR calculation
+  const trueRanges: number[] = [data[0].high - data[0].low]
+  for (let i = 1; i < data.length; i++) {
+    const tr = Math.max(
+      data[i].high - data[i].low,
+      Math.abs(data[i].high - data[i - 1].close),
+      Math.abs(data[i].low - data[i - 1].close),
+    )
+    trueRanges.push(tr)
+  }
+
+  // ATR as EMA of true ranges
+  const atrValues = emaValues(trueRanges, period)
+
+  // Both emaData and atrValues start from index (period-1), align them
+  const len = Math.min(emaData.length, atrValues.length)
+  for (let i = 0; i < len; i++) {
+    const mid = emaData[i].value
+    const atr = atrValues[i]
+    const time = emaData[i].time
+    middle.push({ time, value: mid })
+    upper.push({ time, value: mid + multiplier * atr })
+    lower.push({ time, value: mid - multiplier * atr })
+  }
+
+  return { upper, middle, lower }
+}
+
 // --------------- Helper: raw EMA on number array ---------------
 
 function emaValues(values: number[], period: number): number[] {
